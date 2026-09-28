@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Actions\Cases;
+
+use App\Models\SupportCase;
+use App\Models\User;
+use LogicException;
+
+class UpdateCase
+{
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public function handle(User $actor, SupportCase $case, array $attributes): SupportCase
+    {
+        if ($case->is_closed) {
+            throw new LogicException('Closed cases cannot be edited.');
+        }
+
+        $values = ['updated_by' => $actor->id];
+
+        foreach ([
+            'contact_id',
+            'account_id',
+            'subject',
+            'description',
+            'internal_comments',
+            'status',
+            'priority',
+            'type',
+            'origin',
+            'reason',
+            'web_email',
+            'web_name',
+            'web_company',
+            'web_phone',
+        ] as $key) {
+            if (array_key_exists($key, $attributes)) {
+                $values[$key] = $attributes[$key];
+            }
+        }
+
+        if (array_key_exists('owner_id', $attributes) && $actor->mayReassignOwner() && filled($attributes['owner_id'])) {
+            $values['owner_id'] = $attributes['owner_id'];
+        }
+
+        $case->update($values);
+
+        return $case;
+    }
+}
