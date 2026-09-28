@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasRecordUsers;
+use App\Models\Concerns\VisibleToUser;
 use Database\Factories\AccountFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class Account extends Model
 {
     /** @use HasFactory<AccountFactory> */
-    use HasFactory, HasRecordUsers;
+    use HasFactory, HasRecordUsers, VisibleToUser;
 
     /**
      * @var list<string>

@@ -10,16 +10,16 @@ test('password can be updated', function () {
         ->actingAs($user)
         ->from('/profile')
         ->put('/password', [
-            'current_password' => 'password',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
+            'current_password' => 'Password1',
+            'password' => 'Password2',
+            'password_confirmation' => 'Password2',
         ]);
 
     $response
         ->assertSessionHasNoErrors()
         ->assertRedirect('/profile');
 
-    $this->assertTrue(Hash::check('new-password', $user->refresh()->password));
+    $this->assertTrue(Hash::check('Password2', $user->refresh()->password));
 });
 
 test('correct password must be provided to update password', function () {
@@ -29,9 +29,9 @@ test('correct password must be provided to update password', function () {
         ->actingAs($user)
         ->from('/profile')
         ->put('/password', [
-            'current_password' => 'wrong-password',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
+            'current_password' => 'Wrongpass1',
+            'password' => 'Password2',
+            'password_confirmation' => 'Password2',
         ]);
 
     $response

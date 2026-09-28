@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Actions\Auth\RecordPasswordHistory;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,6 +49,15 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (User $user): void {
+            if ($user->wasRecentlyCreated || $user->wasChanged('password')) {
+                app(RecordPasswordHistory::class)->store($user);
+            }
+        });
     }
 
     public function role(): BelongsTo
@@ -108,5 +118,10 @@ class User extends Authenticatable
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    public function passwordHistories(): HasMany
+    {
+        return $this->hasMany(PasswordHistory::class);
     }
 }
