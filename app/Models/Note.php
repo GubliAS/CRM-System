@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasRecordUsers;
+use App\Models\Concerns\VisibleToUser;
 use Database\Factories\NoteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 class Note extends Model
 {
     /** @use HasFactory<NoteFactory> */
-    use HasFactory, HasRecordUsers;
+    use HasFactory, HasRecordUsers, VisibleToUser;
 
     /**
      * @var list<string>

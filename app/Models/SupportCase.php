@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasRecordUsers;
+use App\Models\Concerns\VisibleToUser;
 use Database\Factories\SupportCaseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class SupportCase extends Model
 {
     /** @use HasFactory<SupportCaseFactory> */
-    use HasFactory, HasRecordUsers;
+    use HasFactory, HasRecordUsers, VisibleToUser;
 
     public const STATUS_CLOSED = 'Closed';
 

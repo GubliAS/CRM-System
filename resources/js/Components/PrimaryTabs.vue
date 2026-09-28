@@ -11,8 +11,8 @@ defineProps({
 const tabs = [
     { label: 'Home', routeName: 'home' },
     { label: 'Leads' },
-    { label: 'Accounts' },
-    { label: 'Contacts' },
+    { label: 'Accounts', routeName: 'accounts.index', active: 'accounts.*' },
+    { label: 'Contacts', routeName: 'contacts.index', active: 'contacts.*' },
     { label: 'Opportunities' },
     { label: 'Cases' },
     { label: 'Tasks' },
@@ -21,6 +21,14 @@ const tabs = [
     { label: 'Dashboards' },
     { label: 'About', routeName: 'about' },
 ];
+
+function tabIsCurrent(tab) {
+    if (tab.active) {
+        return route().current(tab.active);
+    }
+
+    return tab.routeName ? route().current(tab.routeName) : false;
+}
 </script>
 
 <template>
@@ -31,7 +39,7 @@ const tabs = [
                 :href="route(tab.routeName)"
                 class="inline-flex min-h-11 items-center px-3 text-body"
                 :class="
-                    route().current(tab.routeName)
+                    tabIsCurrent(tab)
                         ? 'border-secondary text-primary ' +
                           (stacked ? 'border-l-4' : 'border-b-2')
                         : 'border-transparent text-text ' +

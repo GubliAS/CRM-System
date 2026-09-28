@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasRecordUsers;
+use App\Models\Concerns\VisibleToUser;
 use Database\Factories\TaskFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use InvalidArgumentException;
 class Task extends Model
 {
     /** @use HasFactory<TaskFactory> */
-    use HasFactory, HasRecordUsers;
+    use HasFactory, HasRecordUsers, VisibleToUser;
 
     /**
      * @var list<class-string<Model>>

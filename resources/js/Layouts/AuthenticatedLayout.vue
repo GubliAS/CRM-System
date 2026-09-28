@@ -3,7 +3,12 @@ import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import PrimaryTabs from '@/Components/PrimaryTabs.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+
+const page = usePage();
+const success = computed(() => page.props.flash?.success ?? null);
+const error = computed(() => page.props.flash?.error ?? null);
 </script>
 
 <template>
@@ -73,6 +78,13 @@ import { Link } from '@inertiajs/vue3';
                 <slot name="header" />
             </div>
         </header>
+
+        <div v-if="success" class="bg-success text-surface">
+            <p class="mx-auto max-w-7xl px-4 py-3 text-body">{{ success }}</p>
+        </div>
+        <div v-if="error" class="bg-danger text-surface">
+            <p class="mx-auto max-w-7xl px-4 py-3 text-body">{{ error }}</p>
+        </div>
 
         <main>
             <slot />
