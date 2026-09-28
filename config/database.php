@@ -1,6 +1,13 @@
 <?php
 
 use Illuminate\Support\Str;
+use Pdo\Mysql;
+
+if (PHP_VERSION_ID >= 80500) {
+    $mysqlSslCaOption = Mysql::ATTR_SSL_CA;
+} else {
+    $mysqlSslCaOption = PDO::MYSQL_ATTR_SSL_CA;
+}
 
 return [
 
@@ -58,7 +65,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => (function () {
+                $mysqlSslCaOption => (function () {
                     $ca = env('MYSQL_ATTR_SSL_CA');
 
                     if (! is_string($ca) || $ca === '') {
@@ -86,7 +93,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                $mysqlSslCaOption => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 

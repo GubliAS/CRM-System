@@ -32,4 +32,6 @@ Route::middleware('auth')->group(function () {
     Route::resource('contacts', ContactController::class);
 });
 
+require __DIR__.'/opportunities.php';
+
 require __DIR__.'/auth.php';

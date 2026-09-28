@@ -79,6 +79,21 @@ class Opportunity extends Model
         return $this->morphMany(Note::class, 'notable');
     }
 
+    public function stageHistories(): HasMany
+    {
+        return $this->hasMany(OpportunityStageHistory::class)->orderBy('id');
+    }
+
+    public function recordStageHistory(?string $fromStage, User $actor): OpportunityStageHistory
+    {
+        return $this->stageHistories()->create([
+            'from_stage' => $fromStage,
+            'to_stage' => $this->stage,
+            'probability' => $this->probability,
+            'user_id' => $actor->id,
+        ]);
+    }
+
     /**
      * @return array<string, string>
      */

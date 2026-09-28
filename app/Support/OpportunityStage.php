@@ -48,4 +48,21 @@ final class OpportunityStage
     {
         return $stage === self::CLOSED_WON;
     }
+
+    /**
+     * @return list<array{name: string, probability: int}>
+     */
+    public static function options(): array
+    {
+        $options = [];
+
+        foreach (self::PROBABILITIES as $name => $probability) {
+            $options[] = [
+                'name' => $name,
+                'probability' => $probability,
+            ];
+        }
+
+        return $options;
+    }
 }

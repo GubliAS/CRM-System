@@ -70,4 +70,13 @@ class Picklists
         'Warm',
         'Cold',
     ];
+
+    /**
+     * @var list<string>
+     */
+    public const OPPORTUNITY_TYPES = [
+        'New Business',
+        'Existing Business',
+        'Renewal',
+    ];
 }

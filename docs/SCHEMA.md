@@ -137,7 +137,19 @@ Stage map lives in `app/Support/OpportunityStage.php`. The `Opportunity` saving 
 
 `expected_revenue` is not a column. The accessor returns `amount * probability / 100` as a two-decimal string, or null when `amount` is null. It is appended on the model.
 
-There is no opportunity stage-history table. That belongs to Stage 5.
+A row is written in `opportunity_stage_histories` when an opportunity is created (`from_stage` null) and whenever the stage changes. Other field updates do not add a row.
+
+## opportunity_stage_histories
+
+| Column | MySQL type | Null | Notes |
+| --- | --- | --- | --- |
+| id | BIGINT UNSIGNED | no | Primary key |
+| opportunity_id | BIGINT UNSIGNED | no | FK `opportunities.id`, `ON DELETE CASCADE`, indexed |
+| from_stage | VARCHAR(40) | yes | Null when the opportunity is created |
+| to_stage | VARCHAR(40) | no | |
+| probability | TINYINT UNSIGNED | no | Probability of `to_stage` |
+| user_id | BIGINT UNSIGNED | yes | FK `users.id`, `ON DELETE SET NULL`, indexed |
+| created_at, updated_at | TIMESTAMP | yes | |
 
 ## cases
 
@@ -233,4 +245,5 @@ Write model only. No UI. Table name is `activity_log`.
 - Every foreign key column is indexed. `ON DELETE SET NULL` for nullable user, parent, reports-to, converted, case account/contact, and activity `user_id` keys. `ON DELETE RESTRICT` for `contacts.account_id` and `opportunities.account_id`.
 - Status lookups: `leads.lead_status`, `cases.status`, `tasks.status`.
 - `opportunities.stage`.
+- `opportunity_stage_histories.opportunity_id` cascades on delete. `opportunity_stage_histories.user_id` is set null on delete.
 - Morph pairs: `tasks.related`, `events.related`, `notes.notable`, `activity_log.subject`.
