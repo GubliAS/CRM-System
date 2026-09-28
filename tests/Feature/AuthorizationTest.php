@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\SupportCase;
 use App\Models\Task;
 use App\Models\User;
+use Inertia\Testing\AssertableInertia as Assert;
 
 function userWithRole(string $slug): User
 {
@@ -35,12 +36,18 @@ test('a sales rep cannot open another reps lead and can open their own', functio
     $this->actingAs($rep)
         ->get(route('leads.show', $ownLead))
         ->assertOk()
-        ->assertJsonPath('id', $ownLead->id);
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Leads/Show')
+            ->where('lead.id', $ownLead->id)
+        );
 
     $this->actingAs($manager)
         ->get(route('leads.show', $otherLead))
         ->assertOk()
-        ->assertJsonPath('id', $otherLead->id);
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Leads/Show')
+            ->where('lead.id', $otherLead->id)
+        );
 
     expect(Lead::query()->visibleTo($rep)->whereKey($otherLead->id)->exists())->toBeFalse()
         ->and(Lead::query()->visibleTo($rep)->whereKey($ownLead->id)->exists())->toBeTrue()

@@ -10,7 +10,7 @@ defineProps({
 
 const tabs = [
     { label: 'Home', routeName: 'home' },
-    { label: 'Leads' },
+    { label: 'Leads', routeName: 'leads.index', active: 'leads.*' },
     { label: 'Accounts', routeName: 'accounts.index', active: 'accounts.*' },
     { label: 'Contacts', routeName: 'contacts.index', active: 'contacts.*' },
     { label: 'Opportunities' },
