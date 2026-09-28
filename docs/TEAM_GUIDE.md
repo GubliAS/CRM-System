@@ -11,6 +11,7 @@ Read this first if you are joining the CRM build. The build plan is in [MASTER_P
 - [Pipeline](#pipeline)
 - [Out of scope](#out-of-scope)
 - [How to work](#how-to-work)
+- [Working in parallel](MASTER_PLAN.md#working-in-parallel)
 - [Master plan](MASTER_PLAN.md)
 - [Where Stage 0 stands](#where-stage-0-stands)
 - [Stages](#stages)
@@ -112,7 +113,7 @@ Home suggestions in Stage 9 are two rules only: accounts with no activity for 30
 
 ## How to work
 
-The order and the reason for it are in [MASTER_PLAN.md](MASTER_PLAN.md). Use that plan to see what a stage delivers and what it depends on. Use the prompt file to tell the agent what to build.
+The order and the reason for it are in [MASTER_PLAN.md](MASTER_PLAN.md). Who can build at the same time is in [Working in parallel](MASTER_PLAN.md#working-in-parallel). Use that plan to see what a stage delivers and what it depends on. Use the prompt file to tell the agent what to build.
 
 1. Read the prompt for the current stage.
 2. Paste it in Agent mode.

@@ -77,15 +77,50 @@ P3: native apps, a workflow builder, AI, custom objects, an integration marketpl
 | [1](prompts/stage-01.md) | Schema, models, factories, seed data | Stage 0 accepted, and Aiven credentials in `.env` | Foundation | [stage-01.md](prompts/stage-01.md) |
 | [2](prompts/stage-02.md) | Roles, policies, password policy, lockout, session, password history | Stage 1 | P0 | [stage-02.md](prompts/stage-02.md) |
 | [3](prompts/stage-03.md) | Accounts and contacts | Stage 2 | P0 | [stage-03.md](prompts/stage-03.md) |
-| [4](prompts/stage-04.md) | Leads and conversion | Stage 3 | P0 list and detail; conversion is P1 | [stage-04.md](prompts/stage-04.md) |
-| [5](prompts/stage-05.md) | Opportunities and stages | Stage 4 | P0 | [stage-05.md](prompts/stage-05.md) |
-| [6](prompts/stage-06.md) | Cases | Stage 5 | P0 | [stage-06.md](prompts/stage-06.md) |
-| [7](prompts/stage-07.md) | Global search and recent records | Stage 6 | P0 | [stage-07.md](prompts/stage-07.md) |
-| [8](prompts/stage-08.md) | Tasks, events, calendar | Stage 7 | P1 | [stage-08.md](prompts/stage-08.md) |
-| [9](prompts/stage-09.md) | Home dashboard | Stage 8 | P0 | [stage-09.md](prompts/stage-09.md) |
-| [10](prompts/stage-10.md) | Pre-built reports and the report builder | Stage 9 | P0 reports, then P1 builder | [stage-10.md](prompts/stage-10.md) |
-| [11](prompts/stage-11.md) | Dashboards, CSV import/export, notification email | Stage 10 | P1 | [stage-11.md](prompts/stage-11.md) |
-| [12](prompts/stage-12.md) | JSON API, Docker for the app and local MySQL, deployment docs, three end-to-end journeys | Stage 11 | Close-out | [stage-12.md](prompts/stage-12.md) |
+| [4](prompts/stage-04.md) | Leads and conversion | Stage 3. Agree opportunity required fields with stage 5 before starting. | P0 list and detail; conversion is P1 | [stage-04.md](prompts/stage-04.md) |
+| [5](prompts/stage-05.md) | Opportunities and stages | Stage 3 | P0 | [stage-05.md](prompts/stage-05.md) |
+| [6](prompts/stage-06.md) | Cases | Stage 3 | P0 | [stage-06.md](prompts/stage-06.md) |
+| [7](prompts/stage-07.md) | Global search and recent records | Stages 3, 4, 5, and 6 | P0 | [stage-07.md](prompts/stage-07.md) |
+| [8](prompts/stage-08.md) | Tasks, events, calendar | Stages 1 and 2 | P1 | [stage-08.md](prompts/stage-08.md) |
+| [9](prompts/stage-09.md) | Home dashboard | Stages 4, 5, and 8 | P0 | [stage-09.md](prompts/stage-09.md) |
+| [10](prompts/stage-10.md) | Pre-built reports and the report builder | Stages 3, 4, 5, and 6 | P0 reports, then P1 builder | [stage-10.md](prompts/stage-10.md) |
+| [11](prompts/stage-11.md) | Dashboards, CSV import/export, notification email | Stage 10, plus stages 3 through 6 for import | P1 | [stage-11.md](prompts/stage-11.md) |
+| [12](prompts/stage-12.md) | JSON API, Docker for the app and local MySQL, deployment docs, three end-to-end journeys | Stage 11. End-to-end tests need stages 4, 5, and 6 merged. | Close-out | [stage-12.md](prompts/stage-12.md) |
+
+## Working in parallel
+
+The numbered list is the safe path for one person. With two people, some stages can run at the same time. The windows below are the only splits. Do not invent extra stages.
+
+One person owns each step in this sequence. The other reviews.
+
+| Step | Who | Rule |
+| --- | --- | --- |
+| [Stage 0](prompts/stage-00.md) | One owner | Scaffold is already in the repo. |
+| [Stage 1](prompts/stage-01.md) | One owner | Every later stage depends on this schema. Do not split migrations between two people. |
+| [Stage 2](prompts/stage-02.md) | One owner | Every CRUD page depends on these roles and policies. |
+| [Stage 3](prompts/stage-03.md) | One owner | [Stages 4](prompts/stage-04.md), [5](prompts/stage-05.md), and [6](prompts/stage-06.md) depend on accounts and contacts. |
+
+**First parallel window, after stage 2.** Person A takes [stage 3](prompts/stage-03.md). Person B takes [stage 8](prompts/stage-08.md) (tasks, events, calendar). Stage 8 needs [stages 1](prompts/stage-01.md) and [2](prompts/stage-02.md) only. It does not need stage 3. Finish the related-to picker when accounts and the other records exist.
+
+**Second parallel window, after stage 3.** These three do not depend on each other:
+
+- [Stage 4](prompts/stage-04.md), leads and conversion. Creating an optional opportunity during conversion uses the Opportunity model from [stage 1](prompts/stage-01.md). It does not wait for the stage 5 screens. Agree the opportunity required fields (name, account, close date, stage) before starting stages 4 and 5.
+- [Stage 5](prompts/stage-05.md), opportunities.
+- [Stage 6](prompts/stage-06.md), cases.
+
+With two people, assign two of these. The third starts when one person is free. Stage 8 can still be finishing during this window.
+
+**Third parallel window.** Start a stage here only after the dependencies below are merged. Stages 7, 9, and 10 do not depend on each other. Two people take two of them. Suggested split: one person does [stage 10](prompts/stage-10.md), the other does [stage 9](prompts/stage-09.md), then either person does [stage 7](prompts/stage-07.md).
+
+| Stage | Depends on |
+| --- | --- |
+| [7](prompts/stage-07.md) Search | Stages 3, 4, 5, and 6 |
+| [9](prompts/stage-09.md) Home | Stages 4, 5, and 8 |
+| [10](prompts/stage-10.md) Reports | Stages 3, 4, 5, and 6 |
+
+**Then one after another.** [Stage 11](prompts/stage-11.md) depends on stage 10, because dashboards use saved reports, and on stages 3 through 6 for import. [Stage 12](prompts/stage-12.md) is last. Inside it, the JSON API and the Docker/docs work can be split. End-to-end tests need stages 4, 5, and 6 already merged.
+
+**Do not collide.** In a parallel window, each person owns their own routes, pages, and tests. Do not both rewrite the shared layout, `app.css`, or `routes/web.php` in the same pull. Add routes in a dedicated file per area when Laravel's structure allows it.
 
 ## Why this order
 
