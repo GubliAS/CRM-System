@@ -242,7 +242,7 @@ test('a sales rep can create a lead and change status', function () {
     expect($lead->fresh()->lead_status)->toBe('Working');
 
     $this->actingAs($rep)
-        ->get(route('leads.index'))
+        ->get(route('leads.index', ['view' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Leads/Index')

@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Actions\Contacts\CreateContact;
 use App\Actions\Contacts\DeleteContact;
 use App\Actions\Contacts\UpdateContact;
+use App\Actions\Search\RecordRecentlyViewed;
 use App\Http\Requests\StoreContactRequest;
 use App\Http\Requests\UpdateContactRequest;
 use App\Models\Account;
 use App\Models\Contact;
 use App\Models\User;
 use App\Support\Picklists;
+use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -27,9 +29,14 @@ class ContactController extends Controller
 
         $user = $request->user();
         $search = trim($request->string('search')->toString());
+        $view = $request->string('view')->toString();
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
         $perPage = $this->perPage($request);
+
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
 
         $sortable = [
             'title' => 'title',
@@ -58,6 +65,13 @@ class ContactController extends Controller
                 'account:id,name',
             ]);
 
+        $useRecent = $view === 'recent' && $search === '';
+        $recentIds = $useRecent ? RecentlyViewed::ids($user, Contact::class) : [];
+
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($contacts, Contact::class, $recentIds);
+        }
+
         if ($search !== '') {
             $like = $this->like($search);
             $contacts->where(function (Builder $query) use ($like): void {
@@ -72,28 +86,33 @@ class ContactController extends Controller
             });
         }
 
-        if ($sort === 'name') {
-            $contacts->orderBy('last_name', $direction)->orderBy('first_name', $direction);
-        } elseif ($sort === 'account') {
-            $contacts->orderBy(
-                Account::query()->select('name')->whereColumn('accounts.id', 'contacts.account_id'),
-                $direction,
-            );
-        } elseif ($sort === 'owner') {
-            $contacts->orderBy(
-                User::query()->select('name')->whereColumn('users.id', 'contacts.owner_id'),
-                $direction,
-            );
-        } else {
-            $contacts->orderBy($sortable[$sort], $direction);
+        if (! $useRecent) {
+            if ($sort === 'name') {
+                $contacts->orderBy('last_name', $direction)->orderBy('first_name', $direction);
+            } elseif ($sort === 'account') {
+                $contacts->orderBy(
+                    Account::query()->select('name')->whereColumn('accounts.id', 'contacts.account_id'),
+                    $direction,
+                );
+            } elseif ($sort === 'owner') {
+                $contacts->orderBy(
+                    User::query()->select('name')->whereColumn('users.id', 'contacts.owner_id'),
+                    $direction,
+                );
+            } else {
+                $contacts->orderBy($sortable[$sort], $direction);
+            }
+
+            $contacts->orderBy('id');
         }
 
-        $contacts = $contacts->orderBy('id')->paginate($perPage)->withQueryString();
+        $contacts = $contacts->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)->withQueryString();
 
         return Inertia::render('Contacts/Index', [
             'contacts' => $contacts,
             'filters' => [
                 'search' => $search,
+                'view' => $view,
                 'sort' => $sort,
                 'direction' => $direction,
                 'per_page' => $perPage,
@@ -137,11 +156,12 @@ class ContactController extends Controller
         return $redirect->with('success', 'Contact saved.');
     }
 
-    public function show(Request $request, Contact $contact): Response
+    public function show(Request $request, Contact $contact, RecordRecentlyViewed $recordRecentlyViewed): Response
     {
         $this->authorize('view', $contact);
 
         $user = $request->user();
+        $recordRecentlyViewed->handle($user, $contact);
 
         $contact->load([
             'owner:id,name',

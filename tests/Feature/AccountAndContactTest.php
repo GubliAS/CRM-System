@@ -96,7 +96,7 @@ test('another sales rep cannot see those records and a manager can', function ()
         ->assertForbidden();
 
     $this->actingAs($other)
-        ->get(route('accounts.index'))
+        ->get(route('accounts.index', ['view' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Accounts/Index')
@@ -106,7 +106,7 @@ test('another sales rep cannot see those records and a manager can', function ()
         );
 
     $this->actingAs($other)
-        ->get(route('contacts.index'))
+        ->get(route('contacts.index', ['view' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Contacts/Index')
@@ -306,7 +306,7 @@ test('account lists cap page size and filter by the whitelisted columns', functi
         );
 
     $this->actingAs($rep)
-        ->get(route('accounts.index', ['sort' => 'not-a-column']))
+        ->get(route('accounts.index', ['view' => 'all', 'sort' => 'not-a-column']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('filters.sort', 'name')

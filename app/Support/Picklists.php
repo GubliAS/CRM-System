@@ -74,6 +74,67 @@ class Picklists
     /**
      * @var list<string>
      */
+    public const CASE_STATUSES = [
+        'New',
+        'Working',
+        'Escalated',
+        'Closed',
+    ];
+
+    /**
+     * Editable case statuses (Closed is set by Close / cleared by Reopen).
+     *
+     * @var list<string>
+     */
+    public const CASE_STATUSES_OPEN = [
+        'New',
+        'Working',
+        'Escalated',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    public const CASE_ORIGINS = [
+        'Phone',
+        'Email',
+        'Web',
+        'Chat',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    public const CASE_PRIORITIES = [
+        'High',
+        'Medium',
+        'Low',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    public const CASE_TYPES = [
+        'Question',
+        'Problem',
+        'Feature Request',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    public const CASE_REASONS = [
+        'Installation',
+        'Equipment Complexity',
+        'Performance',
+        'Breakdown',
+        'Usage / How-to',
+        'Other',
+    ];
+
+    /**
+     * @var list<string>
+     */
     public const OPPORTUNITY_TYPES = [
         'New Business',
         'Existing Business',

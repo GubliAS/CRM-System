@@ -14,7 +14,7 @@ const tabs = [
     { label: 'Accounts', routeName: 'accounts.index', active: 'accounts.*' },
     { label: 'Contacts', routeName: 'contacts.index', active: 'contacts.*' },
     { label: 'Opportunities', routeName: 'opportunities.index', active: 'opportunities.*' },
-    { label: 'Cases' },
+    { label: 'Cases', routeName: 'cases.index', active: 'cases.*' },
     { label: 'Tasks' },
     { label: 'Calendar' },
     { label: 'Reports' },
