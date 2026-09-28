@@ -1,0 +1,18 @@
+---
+description: CRM product boundaries, stage discipline, and implementation rules
+alwaysApply: true
+---
+
+- Read README.md before writing code. Implement only the stage named in the user prompt.
+- Do not start the next stage. Do not change Current stage until the user accepts the stage.
+- If a requirement is ambiguous, stop and ask. Do not invent objects or fields.
+- Out of scope unless the user adds a stage: campaigns, products, quotes, recurring events, AI, native apps, workflow builder, custom objects, Gmail/Outlook sync, MFA, file preview.
+- Home suggestions are two queries only: accounts inactive 30 days, opportunities near close date with no recent update.
+- Authorize in Policies. Validate in Form Requests. Controllers call one Action class in app/Actions for writes.
+- Multi-record writes use a DB transaction. Opportunity delete archives. Converted leads and closed cases are read-only.
+- Database is MySQL on Aiven with SSL. Do not introduce PostgreSQL, Neon, or SQLite as the app database. (PHPUnit may use sqlite in-memory so CI does not need Aiven secrets.)
+- Colors, type scale, and spacing used across pages come from variables in resources/css/app.css. Vue uses Tailwind names mapped from those variables. No raw hex and no inline color or font styles in Vue.
+- Ship Pest tests with the feature. Run Pint and the test suite before saying the stage is ready.
+- Never commit .env, keys, passwords, or storage/certs. Never read env() outside config files.
+- Never create a git commit. When a stage is ready, remind the user to commit and give a one-line message.
+- Match existing structure. List files you will touch before editing.

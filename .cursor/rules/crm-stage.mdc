@@ -1,0 +1,10 @@
+---
+description: Only the stage named in the prompt may be implemented
+alwaysApply: true
+---
+
+- The user prompt names the only stage you may implement.
+- Refuse work that belongs to a later stage and say which stage it belongs to.
+- Definition of done: acceptance list in the prompt is true, tests pass, Pint is clean, leftover risks are named.
+- Do not add dependencies the current stage does not need.
+- Do not commit.

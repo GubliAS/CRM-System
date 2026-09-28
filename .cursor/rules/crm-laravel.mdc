@@ -1,0 +1,13 @@
+---
+description: Laravel 11 PHP conventions for this CRM
+globs: "**/*.php"
+alwaysApply: false
+---
+
+- PHP 8.2+ and Laravel 11. Use php artisan make:* for PHP classes.
+- Migrations are the only schema changes. Index foreign keys and lookup columns.
+- Eager load every relationship a page displays. Paginate lists at 25, max 200.
+- Form Requests for validation. Policies for authorization. Actions in app/Actions for writes.
+- Route model binding on detail routes.
+- config() in application code. Secrets only in .env.
+- Password hashes use bcrypt. Login lockout is 5 failures. Session lifetime is 120 minutes. (Do not implement the lockout/history extras in Stage 0; Breeze defaults are enough. These rules are for later stages.)

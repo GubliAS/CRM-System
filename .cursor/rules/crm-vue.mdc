@@ -1,0 +1,14 @@
+---
+description: Vue 3 Inertia page conventions for this CRM
+globs: "**/*.vue"
+alwaysApply: false
+---
+
+- script setup only. Pages in resources/js/Pages/. Shared UI in resources/js/Components/. Layouts in resources/js/Layouts/.
+- Internal navigation uses Inertia Link. Forms use useForm from @inertiajs/vue3.
+- Import app code with the @/ alias.
+- Do not enforce permissions only by hiding buttons.
+- Required fields show a red asterisk. Destructive actions use a confirm dialog.
+- Desktop forms are two columns. Viewports from 320px up must remain usable.
+- No Salesforce logo, name, or proprietary font.
+- No raw hex and no inline color or font styles in Vue. Use token classes from the global CSS theme.
