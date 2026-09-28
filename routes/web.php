@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AboutController;
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\LeadShowController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +24,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::get('/leads/{lead}', LeadShowController::class)->name('leads.show');
+
+    Route::resource('accounts', AccountController::class);
+    Route::resource('contacts', ContactController::class);
 });
 
 require __DIR__.'/auth.php';

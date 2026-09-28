@@ -124,4 +124,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(PasswordHistory::class);
     }
+
+    public function mayReassignOwner(): bool
+    {
+        $this->loadMissing('role');
+
+        return in_array($this->role?->slug, ['admin', 'sales-manager'], true);
+    }
 }
