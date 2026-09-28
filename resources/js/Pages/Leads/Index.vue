@@ -21,6 +21,11 @@ watch(
     },
 );
 
+const views = [
+    { key: 'recent', label: 'Recently Viewed' },
+    { key: 'all', label: 'All Leads' },
+];
+
 const columns = [
     { key: 'name', label: 'Name' },
     { key: 'title', label: 'Title' },
@@ -35,6 +40,7 @@ const columns = [
 function listQuery(extra = {}) {
     return {
         search: search.value || undefined,
+        view: props.filters.view,
         sort: props.filters.sort,
         direction: props.filters.direction,
         per_page: props.filters.per_page,
@@ -44,6 +50,13 @@ function listQuery(extra = {}) {
 
 function applySearch() {
     router.get(route('leads.index'), listQuery(), {
+        preserveState: true,
+        replace: true,
+    });
+}
+
+function changeView(view) {
+    router.get(route('leads.index'), listQuery({ view }), {
         preserveState: true,
         replace: true,
     });
@@ -83,6 +96,23 @@ function changePerPage(event) {
                 >
                     New lead
                 </Link>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button
+                    v-for="view in views"
+                    :key="view.key"
+                    type="button"
+                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    :class="
+                        filters.view === view.key
+                            ? 'border-secondary bg-surface text-primary'
+                            : 'border-border bg-surface text-text'
+                    "
+                    @click="changeView(view.key)"
+                >
+                    {{ view.label }}
+                </button>
             </div>
 
             <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="applySearch">
@@ -132,7 +162,13 @@ function changePerPage(event) {
                     <tbody>
                         <tr v-if="leads.data.length === 0">
                             <td colspan="8" class="px-4 py-8 text-center text-body text-text-muted">
-                                {{ filters.search ? 'No leads match your search.' : 'No leads yet.' }}
+                                {{
+                                    filters.search
+                                        ? 'No leads match your search.'
+                                        : filters.view === 'recent'
+                                          ? 'No recently viewed leads.'
+                                          : 'No leads yet.'
+                                }}
                             </td>
                         </tr>
                         <tr v-for="lead in leads.data" :key="lead.id" class="border-t border-border">

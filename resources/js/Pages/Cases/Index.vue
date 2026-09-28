@@ -23,6 +23,7 @@ watch(
 );
 
 const views = [
+    { key: 'recent', label: 'Recently Viewed' },
     { key: 'my_open', label: 'My Open Cases' },
     { key: 'all_open', label: 'All Open Cases' },
     { key: 'recently_closed', label: 'Recently Closed Cases' },

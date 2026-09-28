@@ -30,6 +30,11 @@ watch(
     },
 );
 
+const views = [
+    { key: 'recent', label: 'Recently Viewed' },
+    { key: 'all', label: 'All Accounts' },
+];
+
 const columns = [
     { key: 'name', label: 'Name' },
     { key: 'phone', label: 'Phone' },
@@ -42,6 +47,7 @@ const columns = [
 function listQuery(extra = {}) {
     return {
         search: search.value || undefined,
+        view: props.filters.view,
         sort: props.filters.sort,
         direction: props.filters.direction,
         per_page: props.filters.per_page,
@@ -51,6 +57,13 @@ function listQuery(extra = {}) {
 
 function applySearch() {
     router.get(route('accounts.index'), listQuery(), {
+        preserveState: true,
+        replace: true,
+    });
+}
+
+function changeView(view) {
+    router.get(route('accounts.index'), listQuery({ view }), {
         preserveState: true,
         replace: true,
     });
@@ -90,6 +103,23 @@ function changePerPage(event) {
                 >
                     New account
                 </Link>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button
+                    v-for="view in views"
+                    :key="view.key"
+                    type="button"
+                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    :class="
+                        filters.view === view.key
+                            ? 'border-secondary bg-surface text-primary'
+                            : 'border-border bg-surface text-text'
+                    "
+                    @click="changeView(view.key)"
+                >
+                    {{ view.label }}
+                </button>
             </div>
 
             <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="applySearch">
@@ -144,7 +174,13 @@ function changePerPage(event) {
                     <tbody>
                         <tr v-if="accounts.data.length === 0">
                             <td colspan="6" class="px-4 py-8 text-center text-body text-text-muted">
-                                {{ filters.search ? 'No accounts match your search.' : 'No accounts yet.' }}
+                                {{
+                                    filters.search
+                                        ? 'No accounts match your search.'
+                                        : filters.view === 'recent'
+                                          ? 'No recently viewed accounts.'
+                                          : 'No accounts yet.'
+                                }}
                             </td>
                         </tr>
                         <tr

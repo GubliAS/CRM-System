@@ -125,6 +125,16 @@ class User extends Authenticatable
         return $this->hasMany(PasswordHistory::class);
     }
 
+    public function searchHistories(): HasMany
+    {
+        return $this->hasMany(SearchHistory::class);
+    }
+
+    public function recentlyViewedRecords(): HasMany
+    {
+        return $this->hasMany(RecentlyViewedRecord::class);
+    }
+
     public function mayReassignOwner(): bool
     {
         $this->loadMissing('role');

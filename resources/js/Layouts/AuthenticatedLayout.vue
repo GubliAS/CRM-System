@@ -2,6 +2,7 @@
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
+import GlobalSearch from '@/Components/GlobalSearch.vue';
 import PrimaryTabs from '@/Components/PrimaryTabs.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -18,6 +19,8 @@ const error = computed(() => page.props.flash?.error ?? null);
                 <Link :href="route('home')" class="shrink-0">
                     <ApplicationLogo />
                 </Link>
+
+                <GlobalSearch />
 
                 <Dropdown align="right" width="48">
                     <template #trigger>

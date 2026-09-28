@@ -9,6 +9,7 @@ use App\Actions\Cases\CreateCase;
 use App\Actions\Cases\DeleteCase;
 use App\Actions\Cases\ReopenCase;
 use App\Actions\Cases\UpdateCase;
+use App\Actions\Search\RecordRecentlyViewed;
 use App\Http\Requests\ChangeCaseOwnerRequest;
 use App\Http\Requests\ChangeCaseStatusRequest;
 use App\Http\Requests\CloseCaseRequest;
@@ -20,6 +21,7 @@ use App\Models\Contact;
 use App\Models\SupportCase;
 use App\Models\User;
 use App\Support\Picklists;
+use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -40,8 +42,8 @@ class CaseController extends Controller
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
         $perPage = $this->perPage($request);
 
-        if (! in_array($view, ['my_open', 'all_open', 'recently_closed'], true)) {
-            $view = 'my_open';
+        if (! in_array($view, ['recent', 'my_open', 'all_open', 'recently_closed'], true)) {
+            $view = 'recent';
         }
 
         $sortable = [
@@ -73,7 +75,14 @@ class CaseController extends Controller
             ])
             ->with(['owner:id,name']);
 
-        $this->applyViewFilter($cases, $view, $user);
+        $useRecent = $view === 'recent' && $search === '';
+        $recentIds = $useRecent ? RecentlyViewed::ids($user, SupportCase::class) : [];
+
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($cases, SupportCase::class, $recentIds);
+        } else {
+            $this->applyViewFilter($cases, $view, $user);
+        }
 
         if ($search !== '') {
             $like = $this->like($search);
@@ -86,16 +95,20 @@ class CaseController extends Controller
             });
         }
 
-        if ($sort === 'owner') {
-            $cases->orderBy(
-                User::query()->select('name')->whereColumn('users.id', 'cases.owner_id'),
-                $direction,
-            );
-        } else {
-            $cases->orderBy($sortable[$sort], $direction);
+        if (! $useRecent) {
+            if ($sort === 'owner') {
+                $cases->orderBy(
+                    User::query()->select('name')->whereColumn('users.id', 'cases.owner_id'),
+                    $direction,
+                );
+            } else {
+                $cases->orderBy($sortable[$sort], $direction);
+            }
+
+            $cases->orderBy('id');
         }
 
-        $cases = $cases->orderBy('id')->paginate($perPage)->withQueryString();
+        $cases = $cases->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)->withQueryString();
 
         return Inertia::render('Cases/Index', [
             'cases' => $cases,
@@ -136,11 +149,12 @@ class CaseController extends Controller
         return $redirect->with('success', 'Case saved.');
     }
 
-    public function show(Request $request, SupportCase $case): Response
+    public function show(Request $request, SupportCase $case, RecordRecentlyViewed $recordRecentlyViewed): Response
     {
         $this->authorize('view', $case);
 
         $user = $request->user();
+        $recordRecentlyViewed->handle($user, $case);
 
         $case->load([
             'owner:id,name',
@@ -259,6 +273,10 @@ class CaseController extends Controller
      */
     private function applyViewFilter(Builder $query, string $view, User $user): void
     {
+        if ($view === 'recent') {
+            return;
+        }
+
         if ($view === 'my_open') {
             $query->where('is_closed', false)->where('owner_id', $user->id);
 

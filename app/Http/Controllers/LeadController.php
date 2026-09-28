@@ -8,6 +8,7 @@ use App\Actions\Leads\ConvertLead;
 use App\Actions\Leads\CreateLead;
 use App\Actions\Leads\DeleteLead;
 use App\Actions\Leads\UpdateLead;
+use App\Actions\Search\RecordRecentlyViewed;
 use App\Http\Requests\ChangeLeadOwnerRequest;
 use App\Http\Requests\ChangeLeadStatusRequest;
 use App\Http\Requests\ConvertLeadRequest;
@@ -18,6 +19,7 @@ use App\Models\Lead;
 use App\Models\User;
 use App\Support\OpportunityStage;
 use App\Support\Picklists;
+use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -34,9 +36,14 @@ class LeadController extends Controller
 
         $user = $request->user();
         $search = trim($request->string('search')->toString());
+        $view = $request->string('view')->toString();
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
         $perPage = $this->perPage($request);
+
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
 
         $sortable = [
             'company' => 'company',
@@ -68,6 +75,13 @@ class LeadController extends Controller
             ])
             ->with(['owner:id,name']);
 
+        $useRecent = $view === 'recent' && $search === '';
+        $recentIds = $useRecent ? RecentlyViewed::ids($user, Lead::class) : [];
+
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($leads, Lead::class, $recentIds);
+        }
+
         if ($search !== '') {
             $like = $this->like($search);
             $leads->where(function (Builder $query) use ($like): void {
@@ -80,23 +94,28 @@ class LeadController extends Controller
             });
         }
 
-        if ($sort === 'name') {
-            $leads->orderBy('last_name', $direction)->orderBy('first_name', $direction);
-        } elseif ($sort === 'owner') {
-            $leads->orderBy(
-                User::query()->select('name')->whereColumn('users.id', 'leads.owner_id'),
-                $direction,
-            );
-        } else {
-            $leads->orderBy($sortable[$sort], $direction);
+        if (! $useRecent) {
+            if ($sort === 'name') {
+                $leads->orderBy('last_name', $direction)->orderBy('first_name', $direction);
+            } elseif ($sort === 'owner') {
+                $leads->orderBy(
+                    User::query()->select('name')->whereColumn('users.id', 'leads.owner_id'),
+                    $direction,
+                );
+            } else {
+                $leads->orderBy($sortable[$sort], $direction);
+            }
+
+            $leads->orderBy('id');
         }
 
-        $leads = $leads->orderBy('id')->paginate($perPage)->withQueryString();
+        $leads = $leads->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)->withQueryString();
 
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
             'filters' => [
                 'search' => $search,
+                'view' => $view,
                 'sort' => $sort,
                 'direction' => $direction,
                 'per_page' => $perPage,
@@ -127,11 +146,12 @@ class LeadController extends Controller
         return $redirect->with('success', 'Lead saved.');
     }
 
-    public function show(Request $request, Lead $lead): Response
+    public function show(Request $request, Lead $lead, RecordRecentlyViewed $recordRecentlyViewed): Response
     {
         $this->authorize('view', $lead);
 
         $user = $request->user();
+        $recordRecentlyViewed->handle($user, $lead);
 
         $lead->load([
             'owner:id,name',

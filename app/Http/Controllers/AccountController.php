@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Actions\Accounts\CreateAccount;
 use App\Actions\Accounts\DeleteAccount;
 use App\Actions\Accounts\UpdateAccount;
+use App\Actions\Search\RecordRecentlyViewed;
 use App\Http\Requests\StoreAccountRequest;
 use App\Http\Requests\UpdateAccountRequest;
 use App\Models\Account;
 use App\Models\Contact;
 use App\Models\User;
 use App\Support\Picklists;
+use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -26,9 +28,14 @@ class AccountController extends Controller
 
         $user = $request->user();
         $search = trim($request->string('search')->toString());
+        $view = $request->string('view')->toString();
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
         $perPage = $this->perPage($request);
+
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
 
         $sortable = [
             'name' => 'name',
@@ -55,6 +62,13 @@ class AccountController extends Controller
             ])
             ->with(['owner:id,name']);
 
+        $useRecent = $view === 'recent' && $search === '';
+        $recentIds = $useRecent ? RecentlyViewed::ids($user, Account::class) : [];
+
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($accounts, Account::class, $recentIds);
+        }
+
         if ($search !== '') {
             $like = $this->like($search);
             $accounts->where(function (Builder $query) use ($like): void {
@@ -64,21 +78,26 @@ class AccountController extends Controller
             });
         }
 
-        if ($sort === 'owner') {
-            $accounts->orderBy(
-                User::query()->select('name')->whereColumn('users.id', 'accounts.owner_id'),
-                $direction,
-            );
-        } else {
-            $accounts->orderBy($sortable[$sort], $direction);
+        if (! $useRecent) {
+            if ($sort === 'owner') {
+                $accounts->orderBy(
+                    User::query()->select('name')->whereColumn('users.id', 'accounts.owner_id'),
+                    $direction,
+                );
+            } else {
+                $accounts->orderBy($sortable[$sort], $direction);
+            }
+
+            $accounts->orderBy('id');
         }
 
-        $accounts = $accounts->orderBy('id')->paginate($perPage)->withQueryString();
+        $accounts = $accounts->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)->withQueryString();
 
         return Inertia::render('Accounts/Index', [
             'accounts' => $accounts,
             'filters' => [
                 'search' => $search,
+                'view' => $view,
                 'sort' => $sort,
                 'direction' => $direction,
                 'per_page' => $perPage,
@@ -112,11 +131,12 @@ class AccountController extends Controller
         return $redirect->with('success', 'Account saved.');
     }
 
-    public function show(Request $request, Account $account): Response
+    public function show(Request $request, Account $account, RecordRecentlyViewed $recordRecentlyViewed): Response
     {
         $this->authorize('view', $account);
 
         $user = $request->user();
+        $recordRecentlyViewed->handle($user, $account);
 
         $account->load([
             'owner:id,name',

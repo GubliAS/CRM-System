@@ -6,6 +6,7 @@ use App\Http\Controllers\CaseController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -23,6 +24,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::get('/search', [SearchController::class, 'index'])->name('search.index');
+    Route::get('/search/suggest', [SearchController::class, 'suggest'])->name('search.suggest');
 
     Route::post('/leads/{lead}/status', [LeadController::class, 'changeStatus'])->name('leads.status');
     Route::post('/leads/{lead}/owner', [LeadController::class, 'changeOwner'])->name('leads.owner');
