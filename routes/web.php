@@ -45,4 +45,8 @@ Route::middleware('auth')->group(function () {
 
 require __DIR__.'/opportunities.php';
 
+require __DIR__.'/tasks.php';
+
+require __DIR__.'/events.php';
+
 require __DIR__.'/auth.php';

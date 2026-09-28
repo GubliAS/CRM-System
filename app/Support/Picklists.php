@@ -140,4 +140,32 @@ class Picklists
         'Existing Business',
         'Renewal',
     ];
+
+    /**
+     * @var list<string>
+     */
+    public const TASK_STATUSES = [
+        'Not Started',
+        'In Progress',
+        'Completed',
+        'Deferred',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    public const TASK_PRIORITIES = [
+        'High',
+        'Normal',
+        'Low',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    public const EVENT_SHOW_TIME_AS = [
+        'Busy',
+        'Free',
+        'Out of Office',
+    ];
 }
