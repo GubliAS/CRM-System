@@ -10,7 +10,7 @@ Agents never commit. After a stage is ready, remind the team and give a one-line
 
 This product is a small customer relationship system for a sales team and a service team that share the same customers. Sales moves a lead through qualification into an account, a contact, and an optional opportunity. Service opens cases against those accounts. Everyone works from one record model, one sharing model, and one web app.
 
-The full description of records, roles, pipeline math, and the interface is in [ABOUT.md](ABOUT.md). The in-app About page renders that file.
+The full description of records, roles, pipeline math, and the interface is in [ABOUT.md](ABOUT.md).
 
 The build process, stage prompts, and manual steps are in [docs/TEAM_GUIDE.md](docs/TEAM_GUIDE.md). The build plan is in [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md).
 

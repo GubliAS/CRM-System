@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\AboutController;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CaseController;
 use App\Http\Controllers\ContactController;
@@ -19,8 +18,6 @@ use Inertia\Inertia;
 Route::get('/', function () {
     return Inertia::render('Welcome');
 });
-
-Route::get('/about', AboutController::class)->name('about');
 
 Route::get('/home', HomeController::class)->middleware(['auth', 'verified'])->name('home');
 

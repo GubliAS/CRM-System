@@ -81,7 +81,7 @@ function changePerPage(event) {
     <AuthenticatedLayout>
         <Head title="Opportunities" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 class="text-h1">Opportunities</h1>
@@ -94,16 +94,16 @@ function changePerPage(event) {
                     <a
                         v-if="can.export"
                         :href="route('opportunities.export', listQuery())"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small"
+                        class="crm-btn-secondary"
                     >
                         Export CSV
                     </a>
                     <Link
                         v-if="can.create"
                         :href="route('opportunities.create')"
-                        class="inline-flex min-h-11 items-center rounded-md border border-transparent bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-white"
+                        class="crm-btn-primary"
                     >
-                        New Opportunity
+                        New opportunity
                     </Link>
                 </div>
             </div>
@@ -187,9 +187,9 @@ function changePerPage(event) {
                 <span v-if="filters.year">Close date year: {{ filters.year }}.</span>
             </p>
 
-            <div class="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
-                <table class="min-w-full text-left text-body">
-                    <thead class="border-b border-border bg-bg text-small text-text-muted">
+            <div class="mt-4 crm-table-wrap">
+                <table class="crm-table">
+                    <thead class="text-small text-text-muted">
                         <tr>
                             <th class="px-3 py-3 font-medium">Name</th>
                             <th class="px-3 py-3 font-medium">Account</th>

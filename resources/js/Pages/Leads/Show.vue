@@ -8,6 +8,7 @@ import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import StatusBadge from '@/Components/StatusBadge.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { display, formatMoney, formatWhen, fullName, personName, websiteHref } from '@/display';
@@ -59,6 +60,24 @@ watch(
 
 const title = computed(() => fullName(props.lead));
 const siteHref = computed(() => websiteHref(props.lead.website));
+
+const statusTone = computed(() => {
+    const value = String(props.lead.lead_status ?? '').toLowerCase();
+
+    if (value === 'converted') {
+        return 'success';
+    }
+
+    if (value === 'unqualified') {
+        return 'neutral';
+    }
+
+    if (value === 'qualified') {
+        return 'info';
+    }
+
+    return 'warning';
+});
 
 const deleteError = computed(() => {
     const value = deleteForm.errors.delete || page.props.errors?.delete || '';
@@ -150,12 +169,15 @@ function submitConvert() {
     <AuthenticatedLayout>
         <Head :title="title" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h1 class="break-words text-h1">{{ title }}</h1>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="break-words text-h1">{{ title }}</h1>
+                        <StatusBadge :tone="statusTone">{{ lead.lead_status }}</StatusBadge>
+                    </div>
                     <p class="mt-1 text-body text-text-muted">
-                        {{ display(lead.company) }} · {{ display(lead.lead_status) }}
+                        {{ display(lead.company) }}
                         <span v-if="lead.converted" class="text-warning"> · Converted (read-only)</span>
                     </p>
                 </div>
@@ -187,7 +209,7 @@ function submitConvert() {
                     <Link
                         v-if="can.update"
                         :href="route('leads.edit', lead.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Edit
                     </Link>
@@ -205,7 +227,7 @@ function submitConvert() {
             <InputError class="mt-3" :message="deleteError" />
 
             <div class="mt-6 space-y-4">
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Lead details</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Salutation" :value="lead.salutation" />
@@ -229,7 +251,7 @@ function submitConvert() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Address</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Street" :value="lead.street" />
@@ -240,7 +262,7 @@ function submitConvert() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Additional information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Industry" :value="lead.industry" />
@@ -250,7 +272,7 @@ function submitConvert() {
                     </dl>
                 </section>
 
-                <section v-if="lead.converted" class="rounded-md border border-border bg-surface p-4">
+                <section v-if="lead.converted" class="crm-panel">
                     <h2 class="text-h2">Converted records</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Account">
@@ -286,7 +308,7 @@ function submitConvert() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">System information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Created by" :value="personName(lead.created_by)" />

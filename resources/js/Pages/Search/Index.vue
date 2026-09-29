@@ -72,7 +72,7 @@ function useRecent(term) {
     <AuthenticatedLayout>
         <Head title="Search" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <h1 class="text-h1">Search</h1>
 
             <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="applySearch">
@@ -87,7 +87,7 @@ function useRecent(term) {
                 </div>
                 <button
                     type="submit"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary"
                 >
                     Search
                 </button>
@@ -116,11 +116,11 @@ function useRecent(term) {
                     v-for="filterType in filterTypes"
                     :key="filterType"
                     type="button"
-                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    class="crm-view-tab"
                     :class="
                         type === filterType
-                            ? 'border-secondary bg-surface text-primary'
-                            : 'border-border bg-surface text-text'
+                            ? 'crm-view-tab-active'
+                            : 'crm-view-tab-idle'
                     "
                     @click="changeType(filterType)"
                 >

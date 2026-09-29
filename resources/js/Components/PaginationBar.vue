@@ -26,11 +26,11 @@ function label(value) {
             <Link
                 v-if="link.url"
                 :href="link.url"
-                class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                class="inline-flex min-h-11 items-center rounded-md border px-3 text-small transition duration-fast"
                 :class="
                     link.active
-                        ? 'border-secondary bg-surface text-primary'
-                        : 'border-border bg-surface text-text'
+                        ? 'border-secondary bg-primary-soft text-primary'
+                        : 'border-border bg-surface text-text hover:bg-bg'
                 "
             >
                 {{ label(link.label) }}

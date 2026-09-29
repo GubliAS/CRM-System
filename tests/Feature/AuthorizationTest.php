@@ -54,6 +54,19 @@ test('a sales rep cannot open another reps lead and can open their own', functio
         ->and(Lead::query()->visibleTo($manager)->whereKey($otherLead->id)->exists())->toBeTrue();
 });
 
+test('a user with no role cannot open accounts index and sees the app 403 page', function () {
+    $user = User::factory()->create(['role_id' => null]);
+
+    $this->actingAs($user)
+        ->get(route('accounts.index'))
+        ->assertForbidden()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Errors/Forbidden')
+            ->where('missingRole', true)
+            ->where('message', 'You do not have access to this page.')
+        );
+});
+
 test('each role is denied the records it must not touch', function () {
     $reader = userWithRole('read-only');
     $service = userWithRole('service-rep');

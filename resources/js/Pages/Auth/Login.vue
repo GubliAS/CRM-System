@@ -30,17 +30,14 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout title="Log in">
         <Head title="Log in" />
 
         <div v-if="status" class="mb-4 text-body font-medium text-success">
             {{ status }}
         </div>
 
-        <form
-            @submit.prevent="submit"
-            class="grid grid-cols-1 gap-4 md:grid-cols-2"
-        >
+        <form @submit.prevent="submit" class="grid grid-cols-1 gap-4">
             <div>
                 <InputLabel required for="email" value="Email" />
 
@@ -72,32 +69,43 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
-            <div class="block md:col-span-2">
-                <label class="flex items-center">
+            <div class="block">
+                <label class="flex min-h-11 items-center">
                     <Checkbox name="remember" v-model:checked="form.remember" />
-                    <span class="ms-2 text-body text-text-muted"
-                        >Remember me</span
-                    >
+                    <span class="ms-2 text-body text-text-muted">Remember me</span>
                 </label>
             </div>
 
-            <div class="flex flex-wrap items-center justify-end gap-3 md:col-span-2">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <Link
                     v-if="canResetPassword"
                     :href="route('password.request')"
-                    class="rounded-md text-body text-text-muted underline hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
+                    class="rounded-md text-body text-secondary underline hover:text-secondary-hover focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
                 >
                     Forgot your password?
                 </Link>
+                <Link
+                    v-else
+                    :href="route('register')"
+                    class="rounded-md text-body text-secondary underline hover:text-secondary-hover focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
+                >
+                    Register
+                </Link>
 
                 <PrimaryButton
-                    class="ms-4"
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
                     Log in
                 </PrimaryButton>
             </div>
+
+            <p v-if="canResetPassword" class="text-small text-text-muted">
+                Need an account?
+                <Link :href="route('register')" class="text-secondary underline">
+                    Register
+                </Link>
+            </p>
         </form>
     </GuestLayout>
 </template>

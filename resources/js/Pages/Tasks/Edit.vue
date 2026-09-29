@@ -49,9 +49,9 @@ function submit(saveAndNew) {
     <AuthenticatedLayout>
         <Head title="Edit task" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <h1 class="break-words text-h1">Edit {{ task.subject }}</h1>
-            <div class="mt-4 rounded-md border border-border bg-surface p-4">
+            <div class="mt-4 crm-panel">
                 <TaskForm
                     :form="form"
                     :assignees="assignees"

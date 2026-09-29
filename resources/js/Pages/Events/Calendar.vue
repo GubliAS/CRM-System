@@ -245,7 +245,7 @@ function destroySelected() {
     <AuthenticatedLayout>
         <Head title="Calendar" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 class="text-h1">Calendar</h1>
@@ -253,7 +253,7 @@ function destroySelected() {
                 </div>
                 <Link
                     :href="route('events.create')"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary"
                 >
                     New event
                 </Link>
@@ -264,11 +264,11 @@ function destroySelected() {
                     v-for="view in views"
                     :key="view.key"
                     type="button"
-                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    class="crm-view-tab"
                     :class="
                         filters.view === view.key
-                            ? 'border-secondary bg-surface text-primary'
-                            : 'border-border bg-surface text-text'
+                            ? 'crm-view-tab-active'
+                            : 'crm-view-tab-idle'
                     "
                     @click="changeView(view.key)"
                 >
@@ -321,9 +321,9 @@ function destroySelected() {
                 </div>
             </div>
 
-            <div v-if="filters.view === 'list'" class="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
-                <table class="min-w-full text-left text-body">
-                    <thead class="bg-bg text-small text-text-muted">
+            <div v-if="filters.view === 'list'" class="mt-4 crm-table-wrap">
+                <table class="crm-table">
+                    <thead>
                         <tr>
                             <th scope="col" class="px-3 py-2">Subject</th>
                             <th scope="col" class="px-3 py-2">Start</th>
@@ -391,7 +391,7 @@ function destroySelected() {
                                 v-for="item in monthItems(day.date).slice(0, 3)"
                                 :key="item.id"
                                 type="button"
-                                class="mt-1 block w-full truncate rounded-md bg-bg px-1 py-1 text-left text-small text-text"
+                                class="crm-chip mt-1 block w-full"
                                 :draggable="item.can_update"
                                 @click.stop="openEvent(item)"
                                 @dragstart="onDragStart($event, item)"
@@ -430,7 +430,7 @@ function destroySelected() {
                                 v-for="item in allDayOn(day.date)"
                                 :key="item.id"
                                 type="button"
-                                class="mt-1 block w-full truncate rounded-md border border-border bg-surface px-1 py-1 text-left text-small text-text"
+                                class="crm-chip mt-1 block w-full"
                                 :draggable="item.can_update"
                                 @click.stop="openEvent(item)"
                                 @dragstart="onDragStart($event, item)"
@@ -460,7 +460,7 @@ function destroySelected() {
                                     v-for="item in timedAt(day.date, hour)"
                                     :key="item.id"
                                     type="button"
-                                    class="mb-1 block w-full truncate rounded-md bg-bg px-1 py-1 text-left text-small text-text"
+                                    class="crm-chip mb-1 block w-full"
                                     :draggable="item.can_update"
                                     @click.stop="openEvent(item)"
                                     @dragstart="onDragStart($event, item)"
@@ -515,14 +515,14 @@ function destroySelected() {
                 <div class="mt-6 flex flex-wrap gap-2">
                     <Link
                         :href="route('events.show', selected.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Open
                     </Link>
                     <Link
                         v-if="selected.can_update"
                         :href="route('events.edit', selected.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Edit
                     </Link>

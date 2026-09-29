@@ -83,7 +83,7 @@ function submitClone() {
     <AuthenticatedLayout>
         <Head :title="opportunity.name" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <p class="text-small text-text-muted">
@@ -134,7 +134,7 @@ function submitClone() {
                 </div>
             </div>
 
-            <section class="mt-6 rounded-md border border-border bg-surface p-4">
+            <section class="mt-6 crm-panel">
                 <h2 class="text-h2">Stage path</h2>
                 <ol class="mt-4 flex flex-wrap gap-2">
                     <li
@@ -155,7 +155,7 @@ function submitClone() {
             </section>
 
             <div class="mt-4 space-y-4">
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Opportunity details</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Opportunity name" :value="opportunity.name" />
@@ -216,7 +216,7 @@ function submitClone() {
 
                 <section
                     v-if="opportunity.description"
-                    class="rounded-md border border-border bg-surface p-4"
+                    class="crm-panel"
                 >
                     <h2 class="text-h2">Description</h2>
                     <p class="mt-3 whitespace-pre-wrap text-body">
@@ -224,7 +224,7 @@ function submitClone() {
                     </p>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Stage history</h2>
                     <div
                         v-if="!opportunity.stage_histories?.length"
@@ -260,7 +260,7 @@ function submitClone() {
                     </ul>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">System information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField

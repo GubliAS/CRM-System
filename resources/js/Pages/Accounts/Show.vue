@@ -43,14 +43,14 @@ function destroy() {
     <AuthenticatedLayout>
         <Head :title="account.name" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <h1 class="break-words text-h1">{{ account.name }}</h1>
                 <div class="flex flex-wrap gap-2">
                     <Link
                         v-if="can.update"
                         :href="route('accounts.edit', account.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Edit
                     </Link>
@@ -63,7 +63,7 @@ function destroy() {
             <InputError class="mt-3" :message="deleteError" />
 
             <div class="mt-6 space-y-4">
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Account details</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Account name" :value="account.name" />
@@ -95,7 +95,7 @@ function destroy() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Address</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Billing street" :value="account.billing_street" />
@@ -111,7 +111,7 @@ function destroy() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Additional information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Employees" :value="account.employees" />
@@ -120,7 +120,7 @@ function destroy() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">System information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Created by" :value="personName(account.created_by)" />
@@ -130,7 +130,7 @@ function destroy() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <h2 class="text-h2">Contacts</h2>
                         <Link
@@ -143,7 +143,7 @@ function destroy() {
                     </div>
 
                     <div class="mt-4 overflow-x-auto">
-                        <table class="min-w-full text-left text-body">
+                        <table class="crm-table">
                             <thead class="text-small text-text-muted">
                                 <tr>
                                     <th scope="col" class="px-3 py-2">Name</th>
