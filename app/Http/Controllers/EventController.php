@@ -39,6 +39,14 @@ class EventController extends Controller
         $anchor = $this->anchor($request);
         [$rangeStart, $rangeEnd] = $this->range($view, $anchor);
 
+        // Day, week and month load the previous, current and next month in one
+        // go, so the calendar can move between them in the browser instead of
+        // waiting on a server round trip per click. The list is paginated and
+        // stays scoped to its month.
+        [$loadStart, $loadEnd] = $view === 'list'
+            ? [$rangeStart, $rangeEnd]
+            : $this->window($anchor);
+
         $events = Event::query()
             ->visibleTo($user)
             ->with([
@@ -46,8 +54,8 @@ class EventController extends Controller
                 'contact:id,first_name,last_name',
                 'assignedTo:id,name',
             ])
-            ->where('starts_at', '<', $rangeEnd)
-            ->where('ends_at', '>', $rangeStart)
+            ->where('starts_at', '<', $loadEnd)
+            ->where('ends_at', '>', $loadStart)
             ->orderByDesc('all_day')
             ->orderBy('starts_at')
             ->orderBy('id');
@@ -73,6 +81,8 @@ class EventController extends Controller
                 'view' => $view,
                 'date' => $anchor->toDateString(),
                 'per_page' => $perPage,
+                'loaded_from' => $view === 'list' ? null : $loadStart->toDateString(),
+                'loaded_to' => $view === 'list' ? null : $loadEnd->toDateString(),
             ],
             'title' => $this->title($view, $anchor, $rangeStart, $rangeEnd),
             'today' => now()->toDateString(),
@@ -141,6 +151,11 @@ class EventController extends Controller
 
         $update->handle($request->user(), $event, $request->validated());
 
+        // The calendar's quick-edit popup stays where the user is.
+        if ($request->boolean('from_calendar')) {
+            return redirect()->back()->with('success', 'Event saved.');
+        }
+
         $redirect = $request->boolean('save_and_new')
             ? redirect()->route('events.create')
             : redirect()->route('events.show', $event);
@@ -148,11 +163,15 @@ class EventController extends Controller
         return $redirect->with('success', 'Event saved.');
     }
 
-    public function destroy(Event $event, DeleteEvent $delete): RedirectResponse
+    public function destroy(Request $request, Event $event, DeleteEvent $delete): RedirectResponse
     {
         $this->authorize('delete', $event);
 
         $delete->handle($event);
+
+        if ($request->boolean('from_calendar')) {
+            return redirect()->back()->with('success', 'Event deleted.');
+        }
 
         return redirect()
             ->route('events.index')
@@ -219,6 +238,12 @@ class EventController extends Controller
             'related_href' => RelatedRecords::showRoute($event->related),
             'contact_name' => RelatedRecords::label($event->contact),
             'assignee' => $event->assignedTo?->name,
+            'assigned_to_id' => $event->assigned_to_id,
+            'is_mine' => (int) $event->assigned_to_id === (int) $user->id
+                || (int) $event->owner_id === (int) $user->id,
+            'related_key' => RelatedRecords::keyFor($event->related_type, RelatedRecords::EVENT_TYPES),
+            'related_id' => $event->related_id,
+            'contact_id' => $event->contact_id,
             'can_update' => $user->can('update', $event),
             'can_delete' => $user->can('delete', $event),
         ];
@@ -251,6 +276,20 @@ class EventController extends Controller
             'all_day' => false,
             'starts_at' => $start->format('Y-m-d\TH:i'),
             'ends_at' => $start->copy()->addHour()->format('Y-m-d\TH:i'),
+        ];
+    }
+
+    /**
+     * Previous, current and next month around the anchor, each padded to whole
+     * weeks so any month grid drawn inside it is fully covered.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function window(Carbon $anchor): array
+    {
+        return [
+            $anchor->copy()->startOfMonth()->subMonthNoOverflow()->startOfWeek(Carbon::SUNDAY),
+            $anchor->copy()->endOfMonth()->addMonthNoOverflow()->endOfMonth()->endOfWeek(Carbon::SUNDAY),
         ];
     }
 

@@ -266,3 +266,119 @@ test('dragging an event keeps its duration', function () {
     expect($event->starts_at->format('Y-m-d H:i'))->toBe($newStart->format('Y-m-d H:i'))
         ->and($event->ends_at->format('Y-m-d H:i'))->toBe($newStart->copy()->addHour()->format('Y-m-d H:i'));
 });
+
+test('the calendar loads the neighbouring months so it can navigate without the server', function () {
+    $rep = activityUser('sales-rep');
+    $anchor = \Carbon\Carbon::parse('2026-10-15 10:00:00');
+
+    $make = fn (string $subject, \Carbon\Carbon $at) => Event::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'subject' => $subject,
+        'is_private' => false,
+        'starts_at' => $at,
+        'ends_at' => $at->copy()->addHour(),
+    ]);
+
+    $september = $make('September event', $anchor->copy()->subMonth());
+    $october = $make('October event', $anchor->copy());
+    $november = $make('November event', $anchor->copy()->addMonth());
+    $december = $make('December event', $anchor->copy()->addMonths(2));
+
+    $this->actingAs($rep)
+        ->get(route('events.index', ['view' => 'month', 'date' => '2026-10-15']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.loaded_from', fn ($from) => $from <= '2026-09-01')
+            ->where('filters.loaded_to', fn ($to) => $to >= '2026-11-30')
+            ->where('events', function ($events) use ($september, $october, $november, $december) {
+                $ids = collect($events)->pluck('id');
+
+                return $ids->contains($september->id)
+                    && $ids->contains($october->id)
+                    && $ids->contains($november->id)
+                    && $ids->doesntContain($december->id);
+            }));
+
+    // The list view stays scoped to its own month and paginated.
+    $this->actingAs($rep)
+        ->get(route('events.index', ['view' => 'list', 'date' => '2026-10-15']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.loaded_from', null)
+            ->where('list.data', fn ($rows) => collect($rows)->pluck('id')->all() === [$october->id]));
+});
+
+test('calendar events say which calendar they belong to and carry what quick edit needs', function () {
+    $rep = activityUser('sales-rep');
+    $manager = activityUser('sales-manager');
+    $starts = now()->addDay()->setTime(9, 0);
+
+    $mine = Event::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'is_private' => false,
+        'starts_at' => $starts,
+        'ends_at' => $starts->copy()->addHour(),
+    ]);
+
+    $theirs = Event::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'is_private' => false,
+        'starts_at' => $starts->copy()->addHours(3),
+        'ends_at' => $starts->copy()->addHours(4),
+    ]);
+
+    $this->actingAs($manager)
+        ->get(route('events.index', ['view' => 'day', 'date' => $starts->toDateString()]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('events', fn ($events) => collect($events)->every(fn ($event) => $event['is_mine'] === false
+                && array_key_exists('assigned_to_id', $event)
+                && array_key_exists('related_key', $event)
+                && array_key_exists('contact_id', $event))));
+
+    $this->actingAs($rep)
+        ->get(route('events.index', ['view' => 'day', 'date' => $starts->toDateString()]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('events', fn ($events) => collect($events)->pluck('is_mine')->every(fn ($flag) => $flag === true)
+                && collect($events)->pluck('id')->contains($mine->id)
+                && collect($events)->pluck('id')->contains($theirs->id)));
+});
+
+test('a quick edit or delete from the calendar goes back to the calendar', function () {
+    $rep = activityUser('sales-rep');
+    $starts = now()->addDay()->setTime(9, 0);
+
+    $event = Event::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'subject' => 'Original',
+        'is_private' => false,
+        'starts_at' => $starts,
+        'ends_at' => $starts->copy()->addHour(),
+    ]);
+
+    $calendar = route('events.index', ['view' => 'week', 'date' => $starts->toDateString()]);
+
+    $this->actingAs($rep)
+        ->from($calendar)
+        ->put(route('events.update', $event), [
+            'from_calendar' => 1,
+            'subject' => 'Renamed in place',
+            'assigned_to_id' => $rep->id,
+            'starts_at' => $starts->format('Y-m-d\TH:i'),
+            'ends_at' => $starts->copy()->addHour()->format('Y-m-d\TH:i'),
+            'show_time_as' => 'Busy',
+        ])
+        ->assertRedirect($calendar);
+
+    expect($event->fresh()->subject)->toBe('Renamed in place');
+
+    $this->actingAs($rep)
+        ->from($calendar)
+        ->delete(route('events.destroy', $event), ['from_calendar' => 1])
+        ->assertRedirect($calendar);
+
+    expect(Event::query()->whereKey($event->id)->exists())->toBeFalse();
+});
