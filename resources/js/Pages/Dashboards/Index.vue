@@ -1,11 +1,13 @@
 <script setup>
+import CrmSelect from '@/Components/CrmSelect.vue';
 import PaginationBar from '@/Components/PaginationBar.vue';
-import TextInput from '@/Components/TextInput.vue';
+import WidgetGlyph from '@/Components/WidgetGlyph.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { useReveal } from '@/composables/useReveal';
 import { display } from '@/display';
 import { Icon } from '@iconify/vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     dashboards: { type: Object, required: true },
@@ -15,6 +17,35 @@ const props = defineProps({
 });
 
 const search = ref(props.filters.search ?? '');
+// Shown immediately on click; the server confirms it a moment later.
+const folderShown = ref(props.filters.folder);
+const pending = ref(false);
+
+const PER_PAGE_OPTIONS = [25, 50, 100].map((n) => ({ value: n, label: `${n} / page` }));
+
+// Banner colours cycle through the same three looks as the Overview stat cards.
+const VARIANTS = ['dark', 'blue', 'soft'];
+
+const { observe } = useReveal('.crm-db-card');
+
+watch(
+    () => props.filters.folder,
+    (value) => {
+        folderShown.value = value;
+    },
+);
+
+let searchTimer = null;
+
+// Search as you type (debounced): every request is a round trip to the server.
+watch(search, (value) => {
+    if ((value ?? '') === (props.filters.search ?? '')) {
+        return;
+    }
+
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applySearch, 400);
+});
 
 watch(
     () => props.filters.search,
@@ -22,6 +53,54 @@ watch(
         search.value = value ?? '';
     },
 );
+
+watch(() => props.dashboards.data, observe);
+
+const pageWidgets = computed(() =>
+    props.dashboards.data.reduce((sum, dashboard) => sum + (dashboard.widget_count ?? 0), 0),
+);
+
+const sharedOnPage = computed(
+    () => props.dashboards.data.filter((dashboard) => dashboard.folder === 'shared').length,
+);
+
+// The thumbnail is a fixed-height box; its rows stretch so any layout fills it
+// (a one-row dashboard is not left as a thin strip above a blank banner).
+function thumbGrid(preview) {
+    const rows = Math.max(1, ...preview.map((item) => item.row + item.height));
+
+    return { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` };
+}
+
+// Thumbnail: the saved layout drawn to scale on a 12-column mini grid.
+function thumbStyle(item) {
+    return {
+        gridColumn: `${item.col + 1} / span ${item.width}`,
+        gridRow: `${item.row + 1} / span ${item.height}`,
+    };
+}
+
+const rangeLabel = computed(
+    () =>
+        `Showing ${props.dashboards.from ?? 0}–${props.dashboards.to ?? 0} of ${props.dashboards.total}`,
+);
+
+function variantFor(index) {
+    return VARIANTS[index % VARIANTS.length];
+}
+
+function initials(name) {
+    const parts = String(name ?? '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+
+    if (parts.length === 0) {
+        return '?';
+    }
+
+    return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
 
 function listQuery(extra = {}) {
     return {
@@ -32,25 +111,50 @@ function listQuery(extra = {}) {
     };
 }
 
-function applySearch() {
-    router.get(route('dashboards.index'), listQuery(), {
+function visit(extra = {}) {
+    router.get(route('dashboards.index'), listQuery(extra), {
         preserveState: true,
+        preserveScroll: true,
         replace: true,
+        onStart: () => {
+            pending.value = true;
+        },
+        onFinish: () => {
+            pending.value = false;
+        },
     });
+}
+
+function applySearch() {
+    clearTimeout(searchTimer);
+    visit();
+}
+
+// Each request is a round trip to a slow (remote) database, so start fetching a
+// tab's data as soon as the pointer reaches it; the click then reuses it.
+function prefetchFolder(folder) {
+    if (folder === folderShown.value) {
+        return;
+    }
+
+    router.prefetch(
+        route('dashboards.index'),
+        { method: 'get', data: listQuery({ folder }) },
+        { cacheFor: '30s' },
+    );
 }
 
 function changeFolder(folder) {
-    router.get(route('dashboards.index'), listQuery({ folder }), {
-        preserveState: true,
-        replace: true,
-    });
+    if (folder === folderShown.value) {
+        return;
+    }
+
+    folderShown.value = folder;
+    visit({ folder });
 }
 
-function changePerPage(event) {
-    router.get(route('dashboards.index'), listQuery({ per_page: event.target.value }), {
-        preserveState: true,
-        replace: true,
-    });
+function changePerPage(value) {
+    visit({ per_page: value });
 }
 
 function destroyDashboard(dashboard) {
@@ -70,168 +174,216 @@ function cloneDashboard(dashboard) {
     <AuthenticatedLayout>
         <Head title="Dashboards" />
 
-        <div class="crm-page">
-            <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h1 class="crm-card-title text-h1">
-                        <span class="crm-card-title-icon" aria-hidden="true">
-                            <Icon icon="solar:widget-4-bold-duotone" />
-                        </span>
-                        Dashboards
-                    </h1>
-                    <p class="mt-1 text-small text-text-muted">
-                        Showing {{ dashboards.from ?? 0 }}–{{ dashboards.to ?? 0 }} of
-                        {{ dashboards.total }}
+        <template #header>
+            <div class="min-w-0">
+                <h1 class="crm-page-title">Dashboards</h1>
+                <p class="crm-page-subtitle">
+                    Saved views of your pipeline, cases and activity.
+                </p>
+            </div>
+        </template>
+
+        <div class="crm-page max-w-none px-4 py-4 sm:px-5">
+            <!-- Hero -->
+            <section class="crm-db-hero">
+                <span class="crm-ov-spot-rings" aria-hidden="true" />
+                <div class="crm-db-hero-copy">
+                    <p class="crm-db-hero-kicker">
+                        <Icon icon="lucide:sparkles" aria-hidden="true" />
+                        Your workspace
                     </p>
+                    <h2 class="crm-db-hero-title">
+                        Turn saved reports into <em>live</em> views.
+                    </h2>
+                    <p class="crm-db-hero-sub">
+                        Arrange charts, tables, metrics and gauges on one board, then share it with your team.
+                    </p>
+                    <Link v-if="can.create" :href="route('dashboards.create')" class="crm-db-hero-cta">
+                        <Icon icon="lucide:plus" aria-hidden="true" />
+                        New dashboard
+                    </Link>
                 </div>
-                <Link
-                    v-if="can.create"
-                    :href="route('dashboards.create')"
-                    class="crm-btn-primary gap-2"
-                >
-                    <Icon icon="solar:add-circle-bold-duotone" class="text-lg" />
-                    New dashboard
-                </Link>
-            </div>
+                <dl class="crm-db-hero-stats">
+                    <div>
+                        <dt>Dashboards</dt>
+                        <dd class="tabular-nums">{{ dashboards.total }}</dd>
+                    </div>
+                    <div>
+                        <dt>Widgets on this page</dt>
+                        <dd class="tabular-nums">{{ pageWidgets }}</dd>
+                    </div>
+                    <div>
+                        <dt>Shared on this page</dt>
+                        <dd class="tabular-nums">{{ sharedOnPage }}</dd>
+                    </div>
+                </dl>
+            </section>
 
-            <div class="mt-4 flex flex-wrap gap-2">
-                <button
-                    v-for="folder in folders"
-                    :key="folder.key"
-                    type="button"
-                    class="crm-view-tab"
-                    :class="
-                        filters.folder === folder.key
-                            ? 'crm-view-tab-active'
-                            : 'crm-view-tab-idle'
-                    "
-                    @click="changeFolder(folder.key)"
-                >
-                    {{ folder.label }}
-                </button>
-            </div>
-
-            <form
-                class="crm-card mt-4 flex flex-wrap items-end gap-3"
-                @submit.prevent="applySearch"
-            >
-                <div class="min-w-0 flex-1 sm:max-w-xs">
-                    <label class="text-small text-text-muted" for="dashboard-search">Search</label>
-                    <TextInput
-                        id="dashboard-search"
-                        v-model="search"
-                        type="search"
-                        class="mt-1 block w-full"
-                        placeholder="Name or description"
-                    />
-                </div>
-                <div>
-                    <label class="text-small text-text-muted" for="dashboard-per-page">Rows</label>
-                    <select
-                        id="dashboard-per-page"
-                        class="mt-1 block min-h-11 rounded-md border-border bg-surface text-body text-text"
-                        :value="filters.per_page"
-                        @change="changePerPage"
+            <!-- Toolbar -->
+            <div class="crm-db-toolbar">
+                <div class="crm-ov-seg" role="tablist" aria-label="Dashboard folders">
+                    <button
+                        v-for="folder in folders"
+                        :key="folder.key"
+                        type="button"
+                        role="tab"
+                        class="crm-ov-seg-btn"
+                        :class="folderShown === folder.key ? 'crm-ov-seg-btn-active' : ''"
+                        :aria-selected="folderShown === folder.key"
+                        @pointerenter="prefetchFolder(folder.key)"
+                        @focus="prefetchFolder(folder.key)"
+                        @click="changeFolder(folder.key)"
                     >
-                        <option :value="25">25</option>
-                        <option :value="50">50</option>
-                        <option :value="100">100</option>
-                    </select>
+                        {{ folder.label }}
+                    </button>
                 </div>
-                <button type="submit" class="crm-btn-secondary gap-2">
-                    <Icon icon="solar:magnifer-bold-duotone" class="text-base" />
-                    Search
-                </button>
-            </form>
 
-            <div v-if="dashboards.data.length === 0" class="crm-card mt-6">
-                <div class="crm-empty text-text-muted">
-                    <Icon
-                        icon="solar:widget-4-bold-duotone"
-                        class="mb-2 text-3xl text-secondary"
+                <form class="crm-db-toolbar-right" @submit.prevent="applySearch">
+                    <label class="crm-db-search">
+                        <Icon icon="lucide:search" aria-hidden="true" />
+                        <input
+                            v-model="search"
+                            type="search"
+                            placeholder="Search name or description"
+                            aria-label="Search dashboards"
+                        />
+                    </label>
+
+                    <CrmSelect
+                        variant="pill"
+                        align="end"
+                        aria-label="Rows per page"
+                        :model-value="filters.per_page"
+                        :options="PER_PAGE_OPTIONS"
+                        @update:model-value="changePerPage"
                     />
-                    <p>No dashboards found.</p>
-                </div>
+
+                    <Link
+                        v-if="can.create"
+                        :href="route('dashboards.create')"
+                        class="crm-db-new"
+                    >
+                        <Icon icon="lucide:plus" aria-hidden="true" />
+                        New dashboard
+                    </Link>
+                </form>
             </div>
 
-            <div v-else class="crm-dash-list-grid mt-6">
+            <p class="crm-db-range">
+                {{ rangeLabel }}
+                <span v-if="pending" class="crm-db-loading" role="status">
+                    <Icon icon="lucide:loader-circle" class="crm-db-spin" aria-hidden="true" />
+                    Loading…
+                </span>
+            </p>
+
+            <!-- Empty -->
+            <div v-if="dashboards.data.length === 0" class="crm-ov-card crm-db-empty">
+                <span class="crm-db-empty-icon" aria-hidden="true">
+                    <Icon icon="lucide:layout-dashboard" />
+                </span>
+                <p class="crm-ov-title">No dashboards found</p>
+                <p class="crm-ov-sub">Try a different folder or search term.</p>
+            </div>
+
+            <!-- Cards -->
+            <div v-else class="crm-db-list" :class="pending ? 'crm-db-list-pending' : ''" :aria-busy="pending">
                 <article
-                    v-for="dashboard in dashboards.data"
+                    v-for="(dashboard, index) in dashboards.data"
                     :key="dashboard.id"
-                    class="crm-dash-card flex flex-col"
+                    class="crm-db-card"
                 >
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="min-w-0">
-                            <Link
-                                :href="route('dashboards.show', dashboard.id)"
-                                class="block truncate text-h3 text-primary hover:text-secondary"
-                            >
-                                {{ dashboard.name }}
-                            </Link>
-                            <p
-                                v-if="dashboard.description"
-                                class="mt-1 line-clamp-2 text-small text-text-muted"
-                            >
-                                {{ display(dashboard.description) }}
-                            </p>
-                        </div>
-                        <span
-                            class="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary-soft px-2 py-1 text-small font-semibold text-primary"
-                        >
-                            <Icon icon="solar:widget-2-bold-duotone" />
-                            {{ dashboard.widget_count }}
+                    <div class="crm-db-card-banner" :class="`crm-db-card-banner-${variantFor(index)}`">
+                        <span class="crm-ov-spot-rings" aria-hidden="true" />
+                        <span class="crm-db-card-badges">
+                            <span class="crm-db-card-count">
+                                <Icon :icon="dashboard.folder === 'shared' ? 'lucide:users' : 'lucide:lock'" aria-hidden="true" />
+                                {{ dashboard.folder === 'shared' ? 'Shared' : 'Private' }}
+                            </span>
+                            <span class="crm-db-card-count">
+                                <Icon icon="lucide:layout-grid" aria-hidden="true" />
+                                {{ dashboard.widget_count }}
+                            </span>
                         </span>
+                        <div
+                            v-if="dashboard.preview.length"
+                            class="crm-db-thumb"
+                            :style="thumbGrid(dashboard.preview)"
+                            aria-hidden="true"
+                        >
+                            <span
+                                v-for="(item, i) in dashboard.preview"
+                                :key="i"
+                                class="crm-db-thumb-item"
+                                :class="`crm-dbt-${item.type}`"
+                                :style="thumbStyle(item)"
+                            >
+                                <WidgetGlyph :type="item.type" />
+                            </span>
+                        </div>
+                        <div v-else class="crm-db-thumb crm-db-thumb-empty" aria-hidden="true">
+                            <Icon icon="lucide:layout-dashboard" />
+                        </div>
                     </div>
 
-                    <dl class="mt-4 grid grid-cols-2 gap-2 text-small text-text-muted">
-                        <div>
-                            <dt>Created by</dt>
-                            <dd class="mt-0.5 font-medium text-text">
-                                {{ display(dashboard.created_by?.name) }}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Created on</dt>
-                            <dd class="mt-0.5 font-medium text-text">
-                                {{ display(dashboard.created_on) }}
-                            </dd>
-                        </div>
-                    </dl>
+                    <div class="crm-db-card-body">
+                        <Link :href="route('dashboards.show', dashboard.id)" class="crm-db-card-name">
+                            {{ dashboard.name }}
+                        </Link>
+                        <p class="crm-db-card-desc">
+                            {{ dashboard.description ? display(dashboard.description) : 'No description' }}
+                        </p>
 
-                    <div class="mt-auto flex flex-wrap gap-3 border-t border-border pt-3">
-                        <Link
-                            :href="route('dashboards.show', dashboard.id)"
-                            class="inline-flex items-center gap-1 text-small text-secondary underline"
-                        >
-                            <Icon icon="solar:eye-bold-duotone" />
+                        <div class="crm-db-card-meta">
+                            <span class="crm-db-avatar" aria-hidden="true">
+                                {{ initials(dashboard.created_by?.name) }}
+                            </span>
+                            <span class="min-w-0">
+                                <span class="crm-db-card-by">{{ display(dashboard.created_by?.name) }}</span>
+                                <span class="crm-db-card-on">
+                                    {{ display(dashboard.created_on) }}
+                                    <template v-if="!dashboard.is_owner"> · shared with you</template>
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="crm-db-card-actions">
+                        <Link :href="route('dashboards.show', dashboard.id)" class="crm-db-open">
                             Open
+                            <Icon icon="lucide:arrow-up-right" aria-hidden="true" />
                         </Link>
-                        <Link
-                            v-if="dashboard.can.update"
-                            :href="route('dashboards.edit', dashboard.id)"
-                            class="inline-flex items-center gap-1 text-small text-secondary underline"
-                        >
-                            <Icon icon="solar:pen-bold-duotone" />
-                            Edit
-                        </Link>
-                        <button
-                            v-if="dashboard.can.clone"
-                            type="button"
-                            class="inline-flex items-center gap-1 text-small text-secondary underline"
-                            @click="cloneDashboard(dashboard)"
-                        >
-                            <Icon icon="solar:copy-bold-duotone" />
-                            Clone
-                        </button>
-                        <button
-                            v-if="dashboard.can.delete"
-                            type="button"
-                            class="inline-flex items-center gap-1 text-small text-danger underline"
-                            @click="destroyDashboard(dashboard)"
-                        >
-                            <Icon icon="solar:trash-bin-trash-bold-duotone" />
-                            Delete
-                        </button>
+                        <span class="crm-db-tools">
+                            <Link
+                                v-if="dashboard.can.update"
+                                :href="route('dashboards.edit', dashboard.id)"
+                                class="crm-ov-row-btn"
+                                title="Edit"
+                                aria-label="Edit dashboard"
+                            >
+                                <Icon icon="lucide:pencil" />
+                            </Link>
+                            <button
+                                v-if="dashboard.can.clone"
+                                type="button"
+                                class="crm-ov-row-btn"
+                                title="Clone"
+                                aria-label="Clone dashboard"
+                                @click="cloneDashboard(dashboard)"
+                            >
+                                <Icon icon="lucide:copy" />
+                            </button>
+                            <button
+                                v-if="dashboard.can.delete"
+                                type="button"
+                                class="crm-ov-row-btn crm-db-danger"
+                                title="Delete"
+                                aria-label="Delete dashboard"
+                                @click="destroyDashboard(dashboard)"
+                            >
+                                <Icon icon="lucide:trash-2" />
+                            </button>
+                        </span>
                     </div>
                 </article>
             </div>

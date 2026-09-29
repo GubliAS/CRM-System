@@ -16,50 +16,57 @@ class DashboardRunner
      */
     public function run(Dashboard $dashboard, User $user, array $globalFilters = []): array
     {
-        $widgets = array_values($dashboard->widgets ?? []);
-        $results = [];
+        return array_map(
+            fn (array $widget): array => $this->runWidget($widget, $user, $globalFilters),
+            array_values($dashboard->widgets ?? []),
+        );
+    }
 
-        foreach ($widgets as $widget) {
-            $reportId = (int) ($widget['report_id'] ?? 0);
-            $report = Report::query()->visibleTo($user)->find($reportId);
+    /**
+     * Runs a single widget definition under the viewer's own permissions. Used
+     * by run() and by the builder, which previews a widget before it is saved.
+     *
+     * @param  array<string, mixed>  $widget
+     * @param  array{date_from?: string|null, date_to?: string|null, owner_id?: int|null}  $globalFilters
+     * @return array<string, mixed>
+     */
+    public function runWidget(array $widget, User $user, array $globalFilters = []): array
+    {
+        $reportId = (int) ($widget['report_id'] ?? 0);
+        $report = Report::query()->visibleTo($user)->find($reportId);
 
-            if ($report === null || $user->cannot('view', $report)) {
-                $results[] = [
-                    'id' => (string) ($widget['id'] ?? ''),
-                    'title' => (string) ($widget['title'] ?? 'Unavailable'),
-                    'type' => (string) ($widget['type'] ?? 'table'),
-                    'report_id' => $reportId,
-                    'report_name' => null,
-                    'report_url' => null,
-                    'error' => 'Report is unavailable.',
-                    'result' => null,
-                    'layout' => $this->layout($widget),
-                ];
-
-                continue;
-            }
-
-            $type = (string) ($widget['type'] ?? 'table');
-            $result = $this->runner->runReport($report, $user, [
-                'page' => 1,
-                'per_page' => $type === 'table' ? 10 : ReportRunner::MAX_PER_PAGE,
-                'global_filters' => $globalFilters,
-            ]);
-
-            $results[] = [
+        if ($report === null || $user->cannot('view', $report)) {
+            return [
                 'id' => (string) ($widget['id'] ?? ''),
-                'title' => (string) ($widget['title'] ?? $report->name),
-                'type' => $type,
-                'report_id' => $report->id,
-                'report_name' => $report->name,
-                'report_url' => route('reports.show', $report),
-                'error' => null,
-                'result' => $this->shapeForType($type, $result),
+                'title' => (string) ($widget['title'] ?? 'Unavailable'),
+                'type' => (string) ($widget['type'] ?? 'table'),
+                'report_id' => $reportId,
+                'report_name' => null,
+                'report_url' => null,
+                'error' => 'Report is unavailable.',
+                'result' => null,
                 'layout' => $this->layout($widget),
             ];
         }
 
-        return $results;
+        $type = (string) ($widget['type'] ?? 'table');
+        $result = $this->runner->runReport($report, $user, [
+            'page' => 1,
+            'per_page' => $type === 'table' ? 10 : ReportRunner::MAX_PER_PAGE,
+            'global_filters' => $globalFilters,
+        ]);
+
+        return [
+            'id' => (string) ($widget['id'] ?? ''),
+            'title' => (string) ($widget['title'] ?? $report->name),
+            'type' => $type,
+            'report_id' => $report->id,
+            'report_name' => $report->name,
+            'report_url' => route('reports.show', $report),
+            'error' => null,
+            'result' => $this->shapeForType($type, $result),
+            'layout' => $this->layout($widget),
+        ];
     }
 
     /**

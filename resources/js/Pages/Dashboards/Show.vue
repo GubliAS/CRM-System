@@ -1,9 +1,13 @@
 <script setup>
+import CrmSelect from '@/Components/CrmSelect.vue';
+import DashboardWidget from '@/Components/DashboardWidget.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { display } from '@/display';
+import { useReveal } from '@/composables/useReveal';
+import { readingOrder } from '@/dashboard/layout';
+import { buildCards } from '@/dashboard/widgets';
 import { Icon } from '@iconify/vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     dashboard: { type: Object, required: true },
@@ -13,9 +17,30 @@ const props = defineProps({
     can: { type: Object, required: true },
 });
 
+const REFRESH_OPTIONS = [
+    { minutes: 0, label: 'Auto-refresh off' },
+    { minutes: 5, label: 'Every 5 min' },
+    { minutes: 10, label: 'Every 10 min' },
+    { minutes: 30, label: 'Every 30 min' },
+    { minutes: 60, label: 'Every 60 min' },
+];
+const REFRESH_KEY = 'crm-dashboard-refresh';
+const REFRESH_SELECT_OPTIONS = REFRESH_OPTIONS.map((option) => ({
+    value: option.minutes,
+    label: option.label,
+    icon: option.minutes === 0 ? 'lucide:timer-off' : 'lucide:timer-reset',
+}));
+const filterKey = () => `crm-dashboard-filters-${props.dashboard.id}`;
+
 const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
 const ownerId = ref(props.filters.owner_id ?? '');
+const refreshing = ref(false);
+const refreshMinutes = ref(0);
+const updatedAt = ref(new Date());
+let timer = null;
+
+const { observe } = useReveal('.crm-ov-card, .crm-ov-stat');
 
 watch(
     () => props.filters,
@@ -26,42 +51,151 @@ watch(
     },
 );
 
-const maxChartValue = computed(() => {
-    let max = 1;
-    for (const widget of props.widgets) {
-        const points = widget.result?.chart?.points ?? [];
-        for (const point of points) {
-            max = Math.max(max, Number(point.value) || 0);
+watch(() => props.widgets, observe);
+
+/* Session-persistent filters and remembered auto-refresh ---------------- */
+
+function readStore(store, key) {
+    try {
+        return store.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function writeStore(store, key, value) {
+    try {
+        if (value === null) {
+            store.removeItem(key);
+        } else {
+            store.setItem(key, value);
         }
-        if (widget.type === 'gauge' || widget.type === 'metric') {
-            max = Math.max(max, Number(widget.result?.value) || 0);
+    } catch {
+        // Storage can be blocked (private windows); the dashboard still works.
+    }
+}
+
+onMounted(() => {
+    const noneApplied = !props.filters.date_from && !props.filters.date_to && !props.filters.owner_id;
+    const stored = readStore(sessionStorage, filterKey());
+
+    if (noneApplied && stored) {
+        try {
+            const saved = JSON.parse(stored);
+
+            if (saved.date_from || saved.date_to || saved.owner_id) {
+                router.get(route('dashboards.show', props.dashboard.id), saved, {
+                    preserveState: true,
+                    replace: true,
+                });
+            }
+        } catch {
+            writeStore(sessionStorage, filterKey(), null);
         }
     }
 
-    return max;
+    const remembered = Number(readStore(localStorage, REFRESH_KEY));
+
+    if (REFRESH_OPTIONS.some((option) => option.minutes === remembered)) {
+        refreshMinutes.value = remembered;
+    }
+
+    schedule();
 });
 
-const widgetTypeIcon = {
-    metric: 'solar:hashtag-bold-duotone',
-    gauge: 'solar:compass-bold-duotone',
-    chart: 'solar:chart-bold-duotone',
-    table: 'solar:table-bold-duotone',
-};
+onBeforeUnmount(() => clearInterval(timer));
+
+function schedule() {
+    clearInterval(timer);
+    timer = null;
+
+    if (refreshMinutes.value > 0) {
+        timer = setInterval(refresh, refreshMinutes.value * 60_000);
+    }
+}
+
+function setAutoRefresh(value) {
+    refreshMinutes.value = Number(value);
+    writeStore(localStorage, REFRESH_KEY, String(refreshMinutes.value));
+    schedule();
+}
+
+/* Widgets ---------------------------------------------------------------- */
+
+// Widgets in reading order, decorated by the same code the builder uses.
+const cards = computed(() =>
+    buildCards(readingOrder(props.widgets.map((widget) => ({ ...widget, ...widget.layout })))),
+);
+
+const folderInfo = computed(() =>
+    props.dashboard.folder === 'shared'
+        ? { icon: 'lucide:users', label: 'Shared' }
+        : { icon: 'lucide:lock', label: 'Private' },
+);
+
+const updatedLabel = computed(() =>
+    updatedAt.value.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+);
+
+const ownerOptions = computed(() => [
+    { value: '', label: 'All owners' },
+    ...props.owners.map((owner) => ({ value: owner.id, label: owner.name })),
+]);
+
+const hasFilters = computed(() => !!(dateFrom.value || dateTo.value || ownerId.value));
+
+function currentFilters() {
+    return {
+        date_from: dateFrom.value || undefined,
+        date_to: dateTo.value || undefined,
+        owner_id: ownerId.value || undefined,
+    };
+}
 
 function applyFilters() {
-    router.get(
-        route('dashboards.show', props.dashboard.id),
-        {
-            date_from: dateFrom.value || undefined,
-            date_to: dateTo.value || undefined,
-            owner_id: ownerId.value || undefined,
-        },
-        { preserveState: true, replace: true },
+    const filters = currentFilters();
+
+    writeStore(
+        sessionStorage,
+        filterKey(),
+        Object.values(filters).some(Boolean) ? JSON.stringify(filters) : null,
     );
+
+    router.get(route('dashboards.show', props.dashboard.id), filters, {
+        preserveState: true,
+        replace: true,
+        onSuccess: () => {
+            updatedAt.value = new Date();
+        },
+    });
+}
+
+function clearFilters() {
+    dateFrom.value = '';
+    dateTo.value = '';
+    ownerId.value = '';
+    applyFilters();
 }
 
 function refresh() {
-    router.reload({ only: ['widgets', 'filters'] });
+    if (refreshing.value) {
+        return;
+    }
+
+    refreshing.value = true;
+    router.reload({
+        only: ['widgets', 'filters'],
+        onSuccess: () => {
+            updatedAt.value = new Date();
+        },
+        onFinish: () => {
+            refreshing.value = false;
+        },
+    });
+}
+
+function printDashboard() {
+    window.print();
 }
 
 function cloneDashboard() {
@@ -76,244 +210,145 @@ function destroyDashboard() {
     router.delete(route('dashboards.destroy', props.dashboard.id));
 }
 
-function barWidth(value) {
-    const amount = Number(value) || 0;
-
-    return `${Math.max((amount / maxChartValue.value) * 100, amount > 0 ? 4 : 0)}%`;
-}
-
-function gaugePercent(value) {
-    const amount = Number(value) || 0;
-    const pct = Math.min(100, Math.round((amount / Math.max(maxChartValue.value, 1)) * 100));
-
-    return `${pct}%`;
-}
-
-function typeIcon(type) {
-    return widgetTypeIcon[type] ?? 'solar:widget-2-bold-duotone';
-}
 </script>
 
 <template>
     <AuthenticatedLayout>
         <Head :title="dashboard.name" />
 
-        <div class="crm-page space-y-6">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <p class="inline-flex items-center gap-1 text-small text-text-muted">
-                        <Icon icon="solar:widget-4-bold-duotone" />
-                        <Link :href="route('dashboards.index')" class="text-secondary underline">
-                            Dashboards
-                        </Link>
-                    </p>
-                    <h1 class="mt-1 text-h1">{{ dashboard.name }}</h1>
-                    <p v-if="dashboard.description" class="mt-1 text-body text-text-muted">
-                        {{ dashboard.description }}
-                    </p>
+        <template #header>
+            <div class="min-w-0">
+                <h1 class="crm-page-title truncate">{{ dashboard.name }}</h1>
+                <p class="crm-page-subtitle truncate">
+                    {{ dashboard.description || 'Live widgets from your saved reports.' }}
+                </p>
+            </div>
+        </template>
+
+        <div class="crm-page crm-db-page max-w-none px-4 py-4 sm:px-5">
+            <!-- Print-only title (the app chrome is hidden when printing) -->
+            <div class="crm-db-print-title">
+                <h1>{{ dashboard.name }}</h1>
+                <p>
+                    {{ dashboard.description }}
+                    <span v-if="hasFilters">· filtered</span>
+                    · printed {{ new Date().toLocaleString() }}
+                </p>
+            </div>
+
+            <!-- Identity + actions -->
+            <div class="crm-db-toolbar crm-db-noprint">
+                <div class="crm-db-chips">
+                    <Link :href="route('dashboards.index')" class="crm-db-back">
+                        <Icon icon="lucide:arrow-left" aria-hidden="true" />
+                        All dashboards
+                    </Link>
+                    <span class="crm-db-chip">
+                        <Icon :icon="folderInfo.icon" aria-hidden="true" />
+                        {{ folderInfo.label }}
+                    </span>
+                    <span class="crm-db-chip">
+                        <Icon icon="lucide:layout-grid" aria-hidden="true" />
+                        {{ widgets.length }} {{ widgets.length === 1 ? 'widget' : 'widgets' }}
+                    </span>
+                    <span v-if="dashboard.owner" class="crm-db-chip">
+                        <Icon icon="lucide:user-round" aria-hidden="true" />
+                        {{ dashboard.owner.name }}
+                    </span>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" class="crm-btn-secondary gap-2" @click="refresh">
-                        <Icon icon="solar:refresh-bold-duotone" class="text-base" />
+
+                <div class="crm-db-toolbar-right">
+                    <button type="button" class="crm-db-ghost" :disabled="refreshing" @click="refresh">
+                        <Icon icon="lucide:refresh-cw" :class="refreshing ? 'crm-db-spin' : ''" aria-hidden="true" />
                         Refresh
                     </button>
-                    <Link
-                        v-if="can.update"
-                        :href="route('dashboards.edit', dashboard.id)"
-                        class="crm-btn-secondary gap-2"
-                    >
-                        <Icon icon="solar:pen-bold-duotone" class="text-base" />
-                        Edit
-                    </Link>
-                    <button
-                        v-if="can.clone"
-                        type="button"
-                        class="crm-btn-secondary gap-2"
-                        @click="cloneDashboard"
-                    >
-                        <Icon icon="solar:copy-bold-duotone" class="text-base" />
+                    <CrmSelect
+                        variant="pill"
+                        align="end"
+                        aria-label="Auto-refresh"
+                        :model-value="refreshMinutes"
+                        :options="REFRESH_SELECT_OPTIONS"
+                        :min-width="190"
+                        @update:model-value="setAutoRefresh"
+                    />
+                    <button type="button" class="crm-db-ghost" @click="printDashboard">
+                        <Icon icon="lucide:printer" aria-hidden="true" />
+                        Print
+                    </button>
+                    <button v-if="can.clone" type="button" class="crm-db-ghost" @click="cloneDashboard">
+                        <Icon icon="lucide:copy" aria-hidden="true" />
                         Clone
                     </button>
                     <button
                         v-if="can.delete"
                         type="button"
-                        class="crm-btn-secondary gap-2 text-danger"
+                        class="crm-db-ghost crm-db-ghost-danger"
                         @click="destroyDashboard"
                     >
-                        <Icon icon="solar:trash-bin-trash-bold-duotone" class="text-base" />
+                        <Icon icon="lucide:trash-2" aria-hidden="true" />
                         Delete
                     </button>
+                    <Link v-if="can.update" :href="route('dashboards.edit', dashboard.id)" class="crm-db-new">
+                        <Icon icon="lucide:pencil" aria-hidden="true" />
+                        Edit
+                    </Link>
                 </div>
             </div>
 
-            <form
-                class="crm-card flex flex-wrap items-end gap-3"
-                @submit.prevent="applyFilters"
-            >
-                <div>
-                    <label class="text-small text-text-muted" for="date-from">Date from</label>
-                    <input
-                        id="date-from"
-                        v-model="dateFrom"
-                        type="date"
-                        class="mt-1 block min-h-11 rounded-md border-border bg-surface text-body text-text"
-                    />
-                </div>
-                <div>
-                    <label class="text-small text-text-muted" for="date-to">Date to</label>
-                    <input
-                        id="date-to"
-                        v-model="dateTo"
-                        type="date"
-                        class="mt-1 block min-h-11 rounded-md border-border bg-surface text-body text-text"
-                    />
-                </div>
-                <div>
-                    <label class="text-small text-text-muted" for="owner-id">Owner</label>
-                    <select
-                        id="owner-id"
+            <!-- Global filters -->
+            <form class="crm-db-filters crm-db-noprint" @submit.prevent="applyFilters">
+                <span class="crm-db-filters-label">
+                    <Icon icon="lucide:sliders-horizontal" aria-hidden="true" />
+                    Filters
+                </span>
+
+                <label class="crm-db-field">
+                    <span>From</span>
+                    <input v-model="dateFrom" type="date" aria-label="Date from" />
+                </label>
+                <label class="crm-db-field">
+                    <span>To</span>
+                    <input v-model="dateTo" type="date" aria-label="Date to" />
+                </label>
+                <div class="crm-db-field">
+                    <span>Owner</span>
+                    <CrmSelect
                         v-model="ownerId"
-                        class="mt-1 block min-h-11 rounded-md border-border bg-surface text-body text-text"
-                    >
-                        <option value="">All owners</option>
-                        <option v-for="owner in owners" :key="owner.id" :value="owner.id">
-                            {{ owner.name }}
-                        </option>
-                    </select>
+                        variant="bare"
+                        aria-label="Owner"
+                        :options="ownerOptions"
+                        :min-width="200"
+                    />
                 </div>
-                <button type="submit" class="crm-btn-primary gap-2">
-                    <Icon icon="solar:filter-bold-duotone" class="text-base" />
-                    Apply filters
+
+                <button type="submit" class="crm-db-new">
+                    <Icon icon="lucide:check" aria-hidden="true" />
+                    Apply
                 </button>
+                <button v-if="hasFilters" type="button" class="crm-db-ghost" @click="clearFilters">Clear</button>
+
+                <span class="crm-db-updated" aria-live="polite">
+                    <span class="crm-db-live" aria-hidden="true" />
+                    Updated {{ updatedLabel }}
+                </span>
             </form>
 
-            <div v-if="widgets.length === 0" class="crm-card text-text-muted">
-                <div class="crm-empty">
-                    <Icon
-                        icon="solar:widget-add-bold-duotone"
-                        class="mb-2 text-3xl text-secondary"
-                    />
-                    <p>
-                        This dashboard has no widgets yet.
-                        <Link
-                            v-if="can.update"
-                            :href="route('dashboards.edit', dashboard.id)"
-                            class="text-secondary underline"
-                        >
-                            Add widgets
-                        </Link>
-                    </p>
-                </div>
+            <!-- Empty -->
+            <div v-if="widgets.length === 0" class="crm-ov-card crm-db-empty">
+                <span class="crm-db-empty-icon" aria-hidden="true">
+                    <Icon icon="lucide:layout-grid" />
+                </span>
+                <p class="crm-ov-title">This dashboard has no widgets yet</p>
+                <p class="crm-ov-sub">
+                    <Link v-if="can.update" :href="route('dashboards.edit', dashboard.id)" class="crm-ov-link-btn">
+                        Add widgets
+                    </Link>
+                </p>
             </div>
 
-            <div v-else class="crm-dash-grid">
-                <section
-                    v-for="widget in widgets"
-                    :key="widget.id"
-                    class="crm-dash-card"
-                >
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                            <h2 class="crm-card-title text-h2">
-                                <span class="crm-card-title-icon" aria-hidden="true">
-                                    <Icon :icon="typeIcon(widget.type)" />
-                                </span>
-                                {{ widget.title }}
-                            </h2>
-                            <p class="mt-1 text-small capitalize text-text-muted">
-                                {{ widget.type }}
-                            </p>
-                        </div>
-                        <Link
-                            v-if="widget.report_url"
-                            :href="widget.report_url"
-                            class="inline-flex items-center gap-1 text-small text-secondary underline"
-                        >
-                            <Icon icon="solar:document-text-bold-duotone" />
-                            Open report
-                        </Link>
-                    </div>
-
-                    <p v-if="widget.error" class="mt-4 text-body text-danger">{{ widget.error }}</p>
-
-                    <div v-else-if="widget.type === 'metric'" class="mt-6">
-                        <p class="text-h1 text-primary">{{ display(widget.result?.value) }}</p>
-                        <p class="text-small text-text-muted">{{ widget.result?.label }}</p>
-                    </div>
-
-                    <div v-else-if="widget.type === 'gauge'" class="mt-6 space-y-2">
-                        <div class="h-3 w-full overflow-hidden rounded-md bg-bg">
-                            <div
-                                class="h-full rounded-md bg-secondary"
-                                :style="{ width: gaugePercent(widget.result?.value) }"
-                            />
-                        </div>
-                        <p class="text-h2 text-primary">{{ display(widget.result?.value) }}</p>
-                        <p class="text-small text-text-muted">{{ widget.result?.label }}</p>
-                    </div>
-
-                    <div v-else-if="widget.type === 'chart'" class="mt-4 space-y-2">
-                        <div
-                            v-for="(point, index) in widget.result?.chart?.points ?? []"
-                            :key="`${widget.id}-${index}`"
-                            class="space-y-1"
-                        >
-                            <div class="flex justify-between text-small">
-                                <span>{{ point.label }}</span>
-                                <span>{{ point.value }}</span>
-                            </div>
-                            <div class="h-2 w-full overflow-hidden rounded-md bg-bg">
-                                <div
-                                    class="h-full rounded-md bg-secondary"
-                                    :style="{ width: barWidth(point.value) }"
-                                />
-                            </div>
-                        </div>
-                        <p
-                            v-if="(widget.result?.chart?.points ?? []).length === 0"
-                            class="text-small text-text-muted"
-                        >
-                            No chart data.
-                        </p>
-                    </div>
-
-                    <div v-else class="mt-4 overflow-x-auto">
-                        <table class="min-w-full text-left text-small">
-                            <thead class="border-b border-border text-text-muted">
-                                <tr>
-                                    <th
-                                        v-for="column in widget.result?.columns ?? []"
-                                        :key="column.key"
-                                        class="px-2 py-1 font-medium"
-                                    >
-                                        {{ column.label }}
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="(row, rowIndex) in widget.result?.rows ?? []"
-                                    :key="`${widget.id}-row-${rowIndex}`"
-                                    class="border-b border-border"
-                                >
-                                    <td
-                                        v-for="column in widget.result?.columns ?? []"
-                                        :key="column.key"
-                                        class="px-2 py-1"
-                                    >
-                                        {{ display(row[column.key]) }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p
-                            v-if="(widget.result?.rows ?? []).length === 0"
-                            class="mt-2 text-small text-text-muted"
-                        >
-                            No rows.
-                        </p>
-                    </div>
-                </section>
+            <!-- Widgets, placed on the saved 12-column layout -->
+            <div v-else class="crm-db-canvas">
+                <DashboardWidget v-for="card in cards" :key="card.widget.id" :card="card" />
             </div>
         </div>
     </AuthenticatedLayout>

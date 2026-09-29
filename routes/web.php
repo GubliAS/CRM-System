@@ -66,6 +66,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/reports/{report}/export', [ReportController::class, 'export'])->name('reports.export');
     Route::resource('reports', ReportController::class);
 
+    Route::post('/dashboards/preview-widget', [DashboardController::class, 'previewWidget'])->name('dashboards.preview-widget');
     Route::post('/dashboards/{dashboard}/clone', [DashboardController::class, 'clone'])->name('dashboards.clone');
     Route::resource('dashboards', DashboardController::class);
 });

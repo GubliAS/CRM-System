@@ -9,6 +9,15 @@ export default {
         './resources/js/**/*.vue',
     ],
 
+    // Classes assembled at runtime (e.g. `crm-dbt-${widget.type}`) never appear in
+    // full in a template, so Tailwind would strip their CSS. Keep them.
+    safelist: [
+        { pattern: /^crm-dbt-/ },
+        { pattern: /^crm-db-card-banner-/ },
+        { pattern: /^crm-ov-stat-(dark|blue|soft)$/ },
+        { pattern: /^crm-sel-(pill|field|bare)$/ },
+    ],
+
     theme: {
         extend: {
             colors: {

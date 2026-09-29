@@ -15,6 +15,17 @@ class Dashboard extends Model
 
     public const FOLDER_PRIVATE = 'private';
 
+    /** Visible (read-only) to every user who may list dashboards. */
+    public const FOLDER_SHARED = 'shared';
+
+    /**
+     * @var list<string>
+     */
+    public const FOLDERS = [
+        self::FOLDER_PRIVATE,
+        self::FOLDER_SHARED,
+    ];
+
     public const MAX_WIDGETS = 20;
 
     /**
@@ -50,7 +61,10 @@ class Dashboard extends Model
             return $query;
         }
 
-        return $query->where('owner_id', $user->id);
+        return $query->where(function (Builder $inner) use ($user): void {
+            $inner->where('owner_id', $user->id)
+                ->orWhere('folder', self::FOLDER_SHARED);
+        });
     }
 
     /**

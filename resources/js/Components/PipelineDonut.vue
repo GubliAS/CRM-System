@@ -44,6 +44,7 @@ const tip = ref(null);
 /** 0 → 1 over the load sweep; sectors are clipped to `sweep * 360°`. */
 const sweep = ref(0);
 let observer = null;
+let visibility = null;
 let frame = 0;
 
 function easeInOutCubic(t) {
@@ -70,12 +71,27 @@ function startSweep() {
 onMounted(() => {
     const el = shell.value;
 
-    startSweep();
 
     fontFamily.value = getComputedStyle(el ?? document.body).fontFamily;
     document.fonts?.ready.then(() => {
         fontsVersion.value++;
     });
+
+    // Start the ring sweep when the donut scrolls into view, not on page load.
+    if (el && typeof IntersectionObserver !== 'undefined') {
+        visibility = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    visibility.disconnect();
+                    startSweep();
+                }
+            },
+            { threshold: 0.35 },
+        );
+        visibility.observe(el);
+    } else {
+        startSweep();
+    }
 
     if (!el || typeof ResizeObserver === 'undefined') {
         return;
@@ -95,6 +111,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     observer?.disconnect();
+    visibility?.disconnect();
     cancelAnimationFrame(frame);
 });
 

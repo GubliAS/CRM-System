@@ -15,7 +15,7 @@ class CreateDashboard
         return Dashboard::query()->create([
             'name' => $attributes['name'],
             'description' => $attributes['description'] ?? null,
-            'folder' => Dashboard::FOLDER_PRIVATE,
+            'folder' => $attributes['folder'] ?? Dashboard::FOLDER_PRIVATE,
             'widgets' => $attributes['widgets'] ?? [],
             'owner_id' => $actor->id,
             'created_by' => $actor->id,
