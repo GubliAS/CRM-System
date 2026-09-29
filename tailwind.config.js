@@ -12,10 +12,10 @@ export default {
     // Classes assembled at runtime (e.g. `crm-dbt-${widget.type}`) never appear in
     // full in a template, so Tailwind would strip their CSS. Keep them.
     safelist: [
-        { pattern: /^crm-dbt-/ },
-        { pattern: /^crm-db-card-banner-/ },
-        { pattern: /^crm-ov-stat-(dark|blue|soft)$/ },
-        { pattern: /^crm-sel-(pill|field|bare)$/ },
+        // Every component class we write ourselves starts with crm-, and state
+        // classes with is-. Some are assembled at runtime, so keep them all.
+        { pattern: /^crm-/ },
+        { pattern: /^is-/ },
     ],
 
     theme: {

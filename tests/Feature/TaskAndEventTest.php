@@ -382,3 +382,99 @@ test('a quick edit or delete from the calendar goes back to the calendar', funct
 
     expect(Event::query()->whereKey($event->id)->exists())->toBeFalse();
 });
+
+test('the task list reports the size of each view in one go', function () {
+    $rep = activityUser('sales-rep');
+    $other = activityUser('sales-rep');
+    $today = now()->toDateString();
+
+    $make = fn (array $attrs) => Task::factory()->create(array_merge([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+    ], $attrs));
+
+    $make(['status' => 'Not Started', 'due_on' => now()->subDays(3)->toDateString()]); // open + overdue
+    $make(['status' => 'In Progress', 'due_on' => $today]);                            // open + today
+    $make(['status' => 'Completed', 'due_on' => $today]);                              // completed + today
+    $make(['status' => 'Deferred', 'due_on' => null]);                                 // open
+    Task::factory()->create(['owner_id' => $other->id, 'assigned_to_id' => $other->id, 'status' => 'Not Started']);
+
+    $this->actingAs($rep)
+        ->get(route('tasks.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Tasks/Index')
+            ->where('counts', ['open' => 3, 'today' => 2, 'overdue' => 1, 'completed' => 1])
+            ->where('filters.layout', 'list')
+            ->where('board', null)
+            ->where('currentUserId', $rep->id));
+});
+
+test('the board layout returns every status side by side and skips the pagination', function () {
+    $rep = activityUser('sales-rep');
+
+    foreach (['Not Started', 'In Progress', 'Completed', 'Deferred'] as $status) {
+        Task::factory()->create([
+            'owner_id' => $rep->id,
+            'assigned_to_id' => $rep->id,
+            'status' => $status,
+            'subject' => "A {$status} task",
+        ]);
+    }
+
+    $this->actingAs($rep)
+        ->get(route('tasks.index', ['layout' => 'board']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('tasks', null)
+            ->where('filters.layout', 'board')
+            ->where('board', fn ($cards) => collect($cards)->pluck('status')->sort()->values()->all()
+                === ['Completed', 'Deferred', 'In Progress', 'Not Started']));
+});
+
+test('a task can be moved to another status, but only by someone who may update it', function () {
+    $rep = activityUser('sales-rep');
+    $other = activityUser('sales-rep');
+
+    $task = Task::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'status' => 'Not Started',
+    ]);
+
+    $this->actingAs($rep)
+        ->from(route('tasks.index', ['layout' => 'board']))
+        ->patch(route('tasks.status', $task), ['status' => 'In Progress'])
+        ->assertRedirect(route('tasks.index', ['layout' => 'board']));
+
+    expect($task->fresh()->status)->toBe('In Progress');
+
+    $this->actingAs($rep)
+        ->patch(route('tasks.status', $task), ['status' => 'Finished'])
+        ->assertSessionHasErrors('status');
+
+    $this->actingAs($other)
+        ->patch(route('tasks.status', $task), ['status' => 'Deferred'])
+        ->assertForbidden();
+
+    expect($task->fresh()->status)->toBe('In Progress');
+});
+
+test('adding a task from the list needs only a subject and returns to the list', function () {
+    $rep = activityUser('sales-rep');
+    $list = route('tasks.index', ['view' => 'open']);
+
+    $this->actingAs($rep)
+        ->from($list)
+        ->post(route('tasks.store'), [
+            'from_list' => 1,
+            'subject' => 'Call Acme back',
+            'assigned_to_id' => $rep->id,
+        ])
+        ->assertRedirect($list);
+
+    $task = Task::query()->where('subject', 'Call Acme back')->firstOrFail();
+
+    expect($task->status)->toBe('Not Started')
+        ->and((int) $task->assigned_to_id)->toBe($rep->id);
+});

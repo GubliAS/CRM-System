@@ -7,6 +7,7 @@ use App\Actions\Tasks\AssignTask;
 use App\Actions\Tasks\CompleteTask;
 use App\Actions\Tasks\CreateTask;
 use App\Actions\Tasks\DeleteTask;
+use App\Actions\Tasks\SetTaskStatus;
 use App\Actions\Tasks\UpdateTask;
 use App\Http\Requests\AssignTaskRequest;
 use App\Http\Requests\CompleteTaskRequest;
@@ -19,11 +20,14 @@ use App\Support\RelatedRecords;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class TaskController extends Controller
 {
+    private const BOARD_LIMIT = 300;
+
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', Task::class);
@@ -50,30 +54,54 @@ class TaskController extends Controller
             $sort = 'due_on';
         }
 
+        $layout = $request->string('layout')->toString() === 'board' ? 'board' : 'list';
+
         $tasks = Task::query()
             ->visibleTo($user)
             ->with([
                 'related',
                 'contact:id,first_name,last_name',
+                'assignedTo:id,name',
             ]);
 
-        $this->applyView($tasks, $view);
+        $paginated = null;
+        $board = null;
 
-        if ($sort === 'due_on') {
-            $tasks->orderByRaw('due_on is null')->orderBy('due_on', $direction);
+        if ($layout === 'board') {
+            // The board shows every status side by side, so the list filter does
+            // not apply; it is capped so a huge backlog cannot slow the page.
+            $board = $tasks
+                ->orderByRaw('due_on is null')
+                ->orderBy('due_on')
+                ->orderBy('id')
+                ->limit(self::BOARD_LIMIT)
+                ->get()
+                ->map(fn (Task $task): array => $this->presentTask($task, $user))
+                ->values();
         } else {
-            $tasks->orderBy($sortable[$sort], $direction);
+            $this->applyView($tasks, $view);
+
+            if ($sort === 'due_on') {
+                $tasks->orderByRaw('due_on is null')->orderBy('due_on', $direction);
+            } else {
+                $tasks->orderBy($sortable[$sort], $direction);
+            }
+
+            $paginated = $tasks->orderBy('id')->paginate($perPage)->withQueryString();
+            $paginated->setCollection($paginated->getCollection()->map(
+                fn (Task $task): array => $this->presentTask($task, $user),
+            ));
         }
 
-        $tasks = $tasks->orderBy('id')->paginate($perPage)->withQueryString();
-        $tasks->setCollection($tasks->getCollection()->map(
-            fn (Task $task): array => $this->presentTask($task, $user),
-        ));
-
         return Inertia::render('Tasks/Index', [
-            'tasks' => $tasks,
+            'tasks' => $paginated,
+            'board' => $board,
+            'counts' => $this->counts($user),
+            'statuses' => Picklists::TASK_STATUSES,
+            'currentUserId' => $user->id,
             'filters' => [
                 'view' => $view,
+                'layout' => $layout,
                 'sort' => $sort,
                 'direction' => $direction,
                 'per_page' => $perPage,
@@ -101,6 +129,10 @@ class TaskController extends Controller
         $this->authorize('create', Task::class);
 
         $task = $create->handle($request->user(), $request->validated());
+
+        if ($request->boolean('from_list')) {
+            return redirect()->back()->with('success', 'Task added.');
+        }
 
         $redirect = $request->boolean('save_and_new')
             ? redirect()->route('tasks.create')
@@ -175,6 +207,24 @@ class TaskController extends Controller
             ->with('success', 'Task completed.');
     }
 
+    /**
+     * Moves a task to any status (board drag-and-drop, status stepper).
+     */
+    public function status(Request $request, Task $task, SetTaskStatus $setStatus): RedirectResponse
+    {
+        $this->authorize('update', $task);
+
+        $data = $request->validate([
+            'status' => ['required', 'string', Rule::in(Picklists::TASK_STATUSES)],
+        ]);
+
+        $setStatus->handle($request->user(), $task, $data['status']);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Task updated.');
+    }
+
     public function assign(AssignTaskRequest $request, Task $task, AssignTask $assign): RedirectResponse
     {
         $assign->handle($request->user(), $task, $request->validated());
@@ -211,6 +261,35 @@ class TaskController extends Controller
     }
 
     /**
+     * Sizes of the four list views in a single query (each round trip to the
+     * database is slow, so this is one aggregate instead of four counts).
+     *
+     * @return array{open: int, today: int, overdue: int, completed: int}
+     */
+    private function counts(User $user): array
+    {
+        $today = now()->toDateString();
+
+        $row = Task::query()
+            ->visibleTo($user)
+            ->selectRaw(
+                "coalesce(sum(case when status != 'Completed' then 1 else 0 end), 0) as open_count,
+                 coalesce(sum(case when status = 'Completed' then 1 else 0 end), 0) as completed_count,
+                 coalesce(sum(case when date(due_on) = ? then 1 else 0 end), 0) as today_count,
+                 coalesce(sum(case when date(due_on) < ? and status != 'Completed' then 1 else 0 end), 0) as overdue_count",
+                [$today, $today],
+            )
+            ->first();
+
+        return [
+            'open' => (int) $row?->open_count,
+            'today' => (int) $row?->today_count,
+            'overdue' => (int) $row?->overdue_count,
+            'completed' => (int) $row?->completed_count,
+        ];
+    }
+
+    /**
      * @param  Builder<Task>  $query
      */
     private function applyView(Builder $query, string $view): void
@@ -241,6 +320,9 @@ class TaskController extends Controller
             'related_label' => RelatedRecords::label($task->related),
             'related_href' => RelatedRecords::showRoute($task->related),
             'contact_name' => RelatedRecords::label($task->contact),
+            'assignee' => $task->assignedTo?->name,
+            'reminder_set' => (bool) $task->reminder_set,
+            'can_update' => $user->can('update', $task),
             'completed' => $task->status === 'Completed',
             'can_complete' => $task->status !== 'Completed' && $user->can('update', $task),
             'overdue' => $dueOn !== null && $dueOn < now()->toDateString() && $task->status !== 'Completed',
