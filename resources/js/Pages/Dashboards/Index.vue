@@ -205,7 +205,7 @@ function cloneDashboard(dashboard) {
                 </table>
             </div>
 
-            <PaginationBar :links="dashboards.links" class="mt-4" />
+            <PaginationBar :paginator="dashboards" class="mt-4" />
         </div>
     </AuthenticatedLayout>
 </template>
