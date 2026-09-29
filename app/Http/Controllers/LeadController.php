@@ -68,6 +68,7 @@ class LeadController extends Controller
 
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
+            'summary' => $this->leadSummary($user),
             'filters' => [
                 'search' => $search,
                 'view' => $view,
@@ -80,6 +81,60 @@ class LeadController extends Controller
                 'export' => $user->can('viewAny', Lead::class),
             ],
         ]);
+    }
+
+    /**
+     * Aggregate counts for the leads overview chrome (same visibility as the list).
+     *
+     * @return array{
+     *     total: int,
+     *     open: int,
+     *     converted: int,
+     *     by_status: list<array{status: string, count: int}>,
+     *     by_source: list<array{source: string, count: int}>
+     * }
+     */
+    private function leadSummary(User $user): array
+    {
+        $base = Lead::query()->visibleTo($user);
+
+        $byStatus = (clone $base)
+            ->select('lead_status', DB::raw('count(*) as aggregate'))
+            ->groupBy('lead_status')
+            ->orderBy('lead_status')
+            ->get()
+            ->map(fn ($row): array => [
+                'status' => (string) $row->lead_status,
+                'count' => (int) $row->aggregate,
+            ])
+            ->values()
+            ->all();
+
+        $bySource = (clone $base)
+            ->select('lead_source', DB::raw('count(*) as aggregate'))
+            ->whereNotNull('lead_source')
+            ->where('lead_source', '!=', '')
+            ->groupBy('lead_source')
+            ->orderByDesc('aggregate')
+            ->limit(6)
+            ->get()
+            ->map(fn ($row): array => [
+                'source' => (string) $row->lead_source,
+                'count' => (int) $row->aggregate,
+            ])
+            ->values()
+            ->all();
+
+        $total = (int) (clone $base)->count();
+        $converted = (int) (clone $base)->where('lead_status', 'Converted')->count();
+
+        return [
+            'total' => $total,
+            'open' => max(0, $total - $converted),
+            'converted' => $converted,
+            'by_status' => $byStatus,
+            'by_source' => $bySource,
+        ];
     }
 
     public function export(Request $request, CsvExporter $exporter): StreamedResponse

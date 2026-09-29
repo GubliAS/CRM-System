@@ -258,6 +258,9 @@ test('a sales rep can create a lead and change status', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Leads/Index')
             ->where('leads.data.0.id', $lead->id)
+            ->has('summary.total')
+            ->has('summary.by_status')
+            ->has('summary.by_source')
         );
 });
 
