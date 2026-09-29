@@ -4,7 +4,7 @@ Stage 0 shell. Agents do not commit. When a stage is ready, a person on the team
 
 ## Tools
 
-- PHP 8.3 or newer. Laravel 11 itself allows 8.2, but Breeze 2.4 installs Pest 4 and PHPUnit 12, and those require 8.3. CI uses PHP 8.3 for that reason.
+- PHP 8.3 or newer. Laravel 11 itself allows 8.2, but Breeze 2.4 installs Pest 4 and PHPUnit 12, and those require 8.3. CI uses PHP 8.4 because composer.lock packages require >= 8.4.1.
 - Composer
 - Node.js 20 (Node 22 is fine locally)
 - npm

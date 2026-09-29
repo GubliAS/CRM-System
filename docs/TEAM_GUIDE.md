@@ -48,7 +48,7 @@ These choices override any earlier database or stack notes.
 | PHP extension | `pdo_mysql` must be enabled. On this machine it is commented out in `C:\php\php.ini`. |
 | App | Laravel 11.56.1, Breeze 2.4.2, Inertia, Vue 3 `<script setup>`, Tailwind. |
 | Stay on Laravel 11 | Do not upgrade to Laravel 12. Composer 2.10 blocks Laravel 11 advisories, so `composer.json` sets `policy.advisories.block` to `false`. |
-| PHP | CI uses PHP 8.3 because Pest 4 requires it. Laravel 11 still allows PHP 8.2. |
+| PHP | CI uses PHP 8.4 because composer.lock packages require >= 8.4.1. Laravel 11 still allows PHP 8.2; Pest 4 needs 8.3+. |
 | Styles | Tokens live in `resources/css/app.css` (`:root`). Vue uses token classes only. No hex and no inline color or font styles. |
 | Tests | Pest uses sqlite `:memory:` so CI does not need Aiven secrets. The running app still uses MySQL. |
 
