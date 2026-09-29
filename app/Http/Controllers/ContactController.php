@@ -11,6 +11,7 @@ use App\Http\Requests\UpdateContactRequest;
 use App\Models\Account;
 use App\Models\Contact;
 use App\Models\User;
+use App\Support\CsvExporter;
 use App\Support\Picklists;
 use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
@@ -20,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContactController extends Controller
 {
@@ -119,8 +121,61 @@ class ContactController extends Controller
             ],
             'can' => [
                 'create' => $user->can('create', Contact::class),
+                'export' => $user->can('viewAny', Contact::class),
             ],
         ]);
+    }
+
+    public function export(Request $request, CsvExporter $exporter): StreamedResponse
+    {
+        $this->authorize('viewAny', Contact::class);
+
+        $user = $request->user();
+        $search = trim($request->string('search')->toString());
+        $view = $request->string('view')->toString();
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
+
+        $contacts = Contact::query()
+            ->visibleTo($user)
+            ->with(['owner:id,name', 'account:id,name']);
+
+        $useRecent = $view === 'recent' && $search === '';
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($contacts, Contact::class, RecentlyViewed::ids($user, Contact::class));
+        }
+
+        if ($search !== '') {
+            $like = $this->like($search);
+            $contacts->where(function (Builder $query) use ($like): void {
+                $query->where('first_name', 'like', $like)
+                    ->orWhere('last_name', 'like', $like)
+                    ->orWhere('email', 'like', $like)
+                    ->orWhere('phone', 'like', $like);
+            });
+        }
+
+        $rows = $contacts->orderBy('last_name')->orderBy('id')->limit(200)->get()
+            ->map(fn (Contact $contact): array => [
+                $contact->first_name,
+                $contact->last_name,
+                $contact->account?->name,
+                $contact->title,
+                $contact->phone,
+                $contact->email,
+                $contact->owner?->name,
+            ]);
+
+        return $exporter->download('contacts.csv', [
+            'First name',
+            'Last name',
+            'Account',
+            'Title',
+            'Phone',
+            'Email',
+            'Owner',
+        ], $rows);
     }
 
     public function create(Request $request): Response

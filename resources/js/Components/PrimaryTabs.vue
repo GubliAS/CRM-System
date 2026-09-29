@@ -17,8 +17,8 @@ const tabs = [
     { label: 'Cases', routeName: 'cases.index', active: 'cases.*' },
     { label: 'Tasks', routeName: 'tasks.index', active: 'tasks.*' },
     { label: 'Calendar', routeName: 'events.index', active: 'events.*' },
-    { label: 'Reports' },
-    { label: 'Dashboards' },
+    { label: 'Reports', routeName: 'reports.index', active: 'reports.*' },
+    { label: 'Dashboards', routeName: 'dashboards.index', active: 'dashboards.*' },
     { label: 'About', routeName: 'about' },
 ];
 

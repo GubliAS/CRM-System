@@ -207,25 +207,47 @@ class HomeDashboard
 
     /**
      * @param  Collection<int, AssistantRecommendationDismissal>  $dismissed
+     * @return list<int>
+     */
+    private function dismissedIdsFor(Collection $dismissed, string $rule, string $type): array
+    {
+        $typeKeys = AssistantRecommendationDismissal::recommendableTypeKeys($type);
+
+        return $dismissed
+            ->filter(fn (AssistantRecommendationDismissal $row): bool => $row->rule === $rule
+                && in_array($row->recommendable_type, $typeKeys, true))
+            ->map(fn (AssistantRecommendationDismissal $row): int => (int) $row->recommendable_id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, AssistantRecommendationDismissal>  $dismissed
      * @return Collection<int, array<string, mixed>>
      */
     private function inactiveAccounts(User $user, Collection $dismissed): Collection
     {
         $cutoff = now()->subDays(self::INACTIVE_ACCOUNT_DAYS);
+        $excludedIds = $this->dismissedIdsFor(
+            $dismissed,
+            AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT,
+            AssistantRecommendationDismissal::TYPE_ACCOUNT,
+        );
 
-        return Account::query()
+        $query = Account::query()
             ->visibleTo($user)
             ->where('updated_at', '<=', $cutoff)
             ->orderBy('updated_at')
             ->orderBy('name')
-            ->limit(self::ASSISTANT_LIMIT)
+            ->limit(self::ASSISTANT_LIMIT);
+
+        if ($excludedIds !== []) {
+            $query->whereNotIn('id', $excludedIds);
+        }
+
+        return $query
             ->get(['id', 'name', 'updated_at'])
-            ->reject(fn (Account $account): bool => $this->isDismissed(
-                $dismissed,
-                AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT,
-                AssistantRecommendationDismissal::TYPE_ACCOUNT,
-                $account->id,
-            ))
             ->map(fn (Account $account): array => [
                 'key' => AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT.':'.AssistantRecommendationDismissal::TYPE_ACCOUNT.':'.$account->id,
                 'rule' => AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT,
@@ -247,8 +269,13 @@ class HomeDashboard
         $today = now()->startOfDay();
         $near = now()->addDays(self::NEAR_CLOSE_DAYS)->endOfDay();
         $staleCutoff = now()->subDays(self::STALE_UPDATE_DAYS);
+        $excludedIds = $this->dismissedIdsFor(
+            $dismissed,
+            AssistantRecommendationDismissal::RULE_STALE_OPPORTUNITY,
+            AssistantRecommendationDismissal::TYPE_OPPORTUNITY,
+        );
 
-        return Opportunity::query()
+        $query = Opportunity::query()
             ->visibleTo($user)
             ->whereNull('archived_at')
             ->where('is_closed', false)
@@ -257,14 +284,14 @@ class HomeDashboard
             ->with(['account:id,name'])
             ->orderBy('close_date')
             ->orderBy('name')
-            ->limit(self::ASSISTANT_LIMIT)
+            ->limit(self::ASSISTANT_LIMIT);
+
+        if ($excludedIds !== []) {
+            $query->whereNotIn('id', $excludedIds);
+        }
+
+        return $query
             ->get(['id', 'name', 'account_id', 'close_date', 'updated_at'])
-            ->reject(fn (Opportunity $opportunity): bool => $this->isDismissed(
-                $dismissed,
-                AssistantRecommendationDismissal::RULE_STALE_OPPORTUNITY,
-                AssistantRecommendationDismissal::TYPE_OPPORTUNITY,
-                $opportunity->id,
-            ))
             ->map(fn (Opportunity $opportunity): array => [
                 'key' => AssistantRecommendationDismissal::RULE_STALE_OPPORTUNITY.':'.AssistantRecommendationDismissal::TYPE_OPPORTUNITY.':'.$opportunity->id,
                 'rule' => AssistantRecommendationDismissal::RULE_STALE_OPPORTUNITY,
@@ -275,20 +302,6 @@ class HomeDashboard
                 'url' => route('opportunities.show', $opportunity),
             ])
             ->values();
-    }
-
-    /**
-     * @param  Collection<int, AssistantRecommendationDismissal>  $dismissed
-     */
-    private function isDismissed(Collection $dismissed, string $rule, string $type, int $id): bool
-    {
-        $typeKeys = AssistantRecommendationDismissal::recommendableTypeKeys($type);
-
-        return $dismissed->contains(function (AssistantRecommendationDismissal $row) use ($rule, $typeKeys, $id): bool {
-            return $row->rule === $rule
-                && in_array($row->recommendable_type, $typeKeys, true)
-                && (int) $row->recommendable_id === $id;
-        });
     }
 
     private function relatedLabel(mixed $related): ?string

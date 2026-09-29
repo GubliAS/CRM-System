@@ -2,8 +2,10 @@
 
 namespace App\Actions\Leads;
 
+use App\Mail\OwnerChangedMail;
 use App\Models\Lead;
 use App\Models\User;
+use App\Support\OutboundMail;
 use LogicException;
 
 class UpdateLead
@@ -17,6 +19,7 @@ class UpdateLead
             throw new LogicException('Converted leads cannot be edited.');
         }
 
+        $previousOwnerId = $lead->owner_id;
         $values = ['updated_by' => $actor->id];
 
         foreach ([
@@ -52,6 +55,20 @@ class UpdateLead
         }
 
         $lead->update($values);
+        $lead = $lead->fresh(['owner']);
+
+        $newOwnerId = (int) ($lead->owner_id ?? 0);
+        if ($newOwnerId > 0 && $newOwnerId !== (int) $previousOwnerId && $lead->owner) {
+            $label = trim(($lead->first_name ? $lead->first_name.' ' : '').$lead->last_name);
+            OutboundMail::queueAndLog(
+                $actor,
+                $lead->owner,
+                $lead,
+                'Owner change notification sent.',
+                OwnerChangedMail::class,
+                [$lead, $lead->owner, $actor, 'lead '.$label],
+            );
+        }
 
         return $lead;
     }

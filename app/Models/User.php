@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Actions\Auth\RecordPasswordHistory;
+use App\Notifications\ResetPasswordQueued;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -140,5 +141,10 @@ class User extends Authenticatable
         $this->loadMissing('role');
 
         return in_array($this->role?->slug, ['admin', 'sales-manager'], true);
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordQueued($token));
     }
 }

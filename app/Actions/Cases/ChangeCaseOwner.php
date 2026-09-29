@@ -2,11 +2,13 @@
 
 namespace App\Actions\Cases;
 
+use App\Mail\OwnerChangedMail;
 use App\Models\ActivityLog;
 use App\Models\Event;
 use App\Models\SupportCase;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\OutboundMail;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
@@ -66,7 +68,20 @@ class ChangeCaseOwner
                 ],
             ]);
 
-            return $case->fresh();
+            $case = $case->fresh(['owner']);
+
+            if ($newOwnerId !== (int) $previousOwnerId && $case?->owner) {
+                OutboundMail::queueAndLog(
+                    $actor,
+                    $case->owner,
+                    $case,
+                    'Owner change notification sent.',
+                    OwnerChangedMail::class,
+                    [$case, $case->owner, $actor, 'case '.$case->case_number],
+                );
+            }
+
+            return $case;
         });
     }
 }

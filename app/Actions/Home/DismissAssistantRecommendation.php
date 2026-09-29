@@ -11,11 +11,13 @@ class DismissAssistantRecommendation
 {
     public function handle(User $actor, string $rule, Model $record): AssistantRecommendationDismissal
     {
-        $type = AssistantRecommendationDismissal::canonicalizeRecommendableType($record->getMorphClass());
+        // Use ::class (not getMorphClass) so we never depend on a global morph map that
+        // would rewrite related_type values for tasks/events elsewhere in the CRM.
+        $type = AssistantRecommendationDismissal::canonicalizeRecommendableType($record::class);
         $id = $record->getKey();
 
         return DB::transaction(function () use ($actor, $rule, $type, $id): AssistantRecommendationDismissal {
-            // Drop legacy short-slug rows so the unique key cannot diverge.
+            // Drop legacy FQCN rows so the unique key cannot diverge from the alias.
             AssistantRecommendationDismissal::query()
                 ->where('user_id', $actor->id)
                 ->where('rule', $rule)

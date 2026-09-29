@@ -79,9 +79,9 @@ test('a dismissed recommendation stays dismissed for that user', function () {
     );
 
     expect($recommendation)->not->toBeNull()
-        ->and($recommendation['recommendable_type'])->toBe(Account::class);
+        ->and($recommendation['recommendable_type'])->toBe('account');
 
-    // Post the exact payload type the Home page emits (what Vue posts on dismiss).
+    // Post the exact payload type the Home page emits (short morph alias).
     $this->actingAs($user)
         ->post(route('home.recommendations.dismiss'), [
             'rule' => $recommendation['rule'],
@@ -94,10 +94,86 @@ test('a dismissed recommendation stays dismissed for that user', function () {
         AssistantRecommendationDismissal::query()
             ->where('user_id', $user->id)
             ->where('rule', AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT)
-            ->where('recommendable_type', Account::class)
+            ->where('recommendable_type', 'account')
             ->where('recommendable_id', $account->id)
             ->exists()
     )->toBeTrue();
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Home')
+            ->where('recommendations', fn ($rows) => collect($rows)->doesntContain(
+                fn ($row) => $row['rule'] === AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT
+                    && (int) $row['recommendable_id'] === $account->id
+            ))
+        );
+});
+
+test('dismiss accepts legacy FQCN recommendable_type from older clients', function () {
+    $user = homeUser();
+
+    $account = Account::factory()->create([
+        'name' => 'FQCN Client Co',
+        'owner_id' => $user->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+    ]);
+
+    $account->forceFill([
+        'updated_at' => now()->subDays(45),
+        'created_at' => now()->subDays(60),
+    ])->saveQuietly();
+
+    $this->actingAs($user)
+        ->post(route('home.recommendations.dismiss'), [
+            'rule' => AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT,
+            'recommendable_type' => Account::class,
+            'recommendable_id' => $account->id,
+        ])
+        ->assertRedirect(route('home'));
+
+    expect(
+        AssistantRecommendationDismissal::query()
+            ->where('user_id', $user->id)
+            ->where('recommendable_type', 'account')
+            ->where('recommendable_id', $account->id)
+            ->exists()
+    )->toBeTrue();
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('recommendations', fn ($rows) => collect($rows)->doesntContain(
+                fn ($row) => (int) $row['recommendable_id'] === $account->id
+                    && $row['rule'] === AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT
+            ))
+        );
+});
+
+test('legacy FQCN dismissal rows still hide recommendations', function () {
+    $user = homeUser();
+
+    $account = Account::factory()->create([
+        'name' => 'Legacy FQCN Dismissed Co',
+        'owner_id' => $user->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+    ]);
+
+    $account->forceFill([
+        'updated_at' => now()->subDays(45),
+        'created_at' => now()->subDays(60),
+    ])->saveQuietly();
+
+    AssistantRecommendationDismissal::query()->create([
+        'user_id' => $user->id,
+        'rule' => AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT,
+        'recommendable_type' => Account::class,
+        'recommendable_id' => $account->id,
+    ]);
 
     $this->actingAs($user)
         ->get(route('home'))
@@ -142,6 +218,54 @@ test('legacy short-slug dismissal rows still hide recommendations', function () 
                 fn ($row) => $row['rule'] === AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT
                     && (int) $row['recommendable_id'] === $account->id
             ))
+        );
+});
+
+test('dismissed ids are excluded before the assistant limit so later accounts still appear', function () {
+    $user = homeUser();
+
+    $accounts = collect(range(1, 12))->map(function (int $i) use ($user) {
+        $account = Account::factory()->create([
+            'name' => sprintf('Inactive %02d', $i),
+            'owner_id' => $user->id,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+
+        $account->forceFill([
+            'updated_at' => now()->subDays(40 + $i),
+            'created_at' => now()->subDays(60),
+        ])->saveQuietly();
+
+        return $account;
+    });
+
+    // Dismiss the 10 oldest (would monopolize a limit-then-filter query).
+    foreach ($accounts->sortBy('updated_at')->take(10) as $account) {
+        AssistantRecommendationDismissal::query()->create([
+            'user_id' => $user->id,
+            'rule' => AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT,
+            'recommendable_type' => 'account',
+            'recommendable_id' => $account->id,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('recommendations', function ($rows) use ($accounts) {
+                $ids = collect($rows)
+                    ->where('rule', AssistantRecommendationDismissal::RULE_INACTIVE_ACCOUNT)
+                    ->pluck('recommendable_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+
+                $remaining = $accounts->sortBy('updated_at')->slice(10)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+                return count(array_intersect($ids, $remaining)) === count($remaining)
+                    && count(array_intersect($ids, $accounts->sortBy('updated_at')->take(10)->pluck('id')->all())) === 0;
+            })
         );
 });
 

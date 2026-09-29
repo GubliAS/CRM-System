@@ -17,6 +17,7 @@ use App\Http\Requests\UpdateLeadRequest;
 use App\Models\Account;
 use App\Models\Lead;
 use App\Models\User;
+use App\Support\CsvExporter;
 use App\Support\OpportunityStage;
 use App\Support\Picklists;
 use App\Support\RecentlyViewed;
@@ -27,6 +28,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LeadController extends Controller
 {
@@ -40,6 +42,88 @@ class LeadController extends Controller
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
         $perPage = $this->perPage($request);
+
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
+
+        $sortable = [
+            'company' => 'company',
+            'title' => 'title',
+            'phone' => 'phone',
+            'email' => 'email',
+            'lead_source' => 'lead_source',
+            'lead_status' => 'lead_status',
+        ];
+
+        if (! array_key_exists($sort, $sortable) && ! in_array($sort, ['name', 'owner'], true)) {
+            $sort = 'name';
+        }
+
+        $useRecent = $view === 'recent' && $search === '';
+
+        $leads = $this->filteredLeadsQuery($request)
+            ->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)
+            ->withQueryString();
+
+        return Inertia::render('Leads/Index', [
+            'leads' => $leads,
+            'filters' => [
+                'search' => $search,
+                'view' => $view,
+                'sort' => $sort,
+                'direction' => $direction,
+                'per_page' => $perPage,
+            ],
+            'can' => [
+                'create' => $user->can('create', Lead::class),
+                'export' => $user->can('viewAny', Lead::class),
+            ],
+        ]);
+    }
+
+    public function export(Request $request, CsvExporter $exporter): StreamedResponse
+    {
+        $this->authorize('viewAny', Lead::class);
+
+        $rows = $this->filteredLeadsQuery($request)
+            ->limit(200)
+            ->get()
+            ->map(fn (Lead $lead): array => [
+                $lead->first_name,
+                $lead->last_name,
+                $lead->company,
+                $lead->title,
+                $lead->phone,
+                $lead->email,
+                $lead->lead_source,
+                $lead->owner?->name,
+                $lead->lead_status,
+            ]);
+
+        return $exporter->download('leads.csv', [
+            'First name',
+            'Last name',
+            'Company',
+            'Title',
+            'Phone',
+            'Email',
+            'Lead source',
+            'Owner',
+            'Lead status',
+        ], $rows);
+    }
+
+    /**
+     * @return Builder<Lead>
+     */
+    private function filteredLeadsQuery(Request $request): Builder
+    {
+        $user = $request->user();
+        $search = trim($request->string('search')->toString());
+        $view = $request->string('view')->toString();
+        $sort = $request->string('sort')->toString();
+        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
         if (! in_array($view, ['recent', 'all'], true)) {
             $view = 'recent';
@@ -109,21 +193,7 @@ class LeadController extends Controller
             $leads->orderBy('id');
         }
 
-        $leads = $leads->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)->withQueryString();
-
-        return Inertia::render('Leads/Index', [
-            'leads' => $leads,
-            'filters' => [
-                'search' => $search,
-                'view' => $view,
-                'sort' => $sort,
-                'direction' => $direction,
-                'per_page' => $perPage,
-            ],
-            'can' => [
-                'create' => $user->can('create', Lead::class),
-            ],
-        ]);
+        return $leads;
     }
 
     public function create(): Response

@@ -12,9 +12,12 @@ class AssistantRecommendationDismissal extends Model
 
     public const RULE_STALE_OPPORTUNITY = 'stale_opportunity';
 
-    public const TYPE_ACCOUNT = Account::class;
+    /**
+     * Stable morph aliases used on the wire and in storage (no PHP namespace backslashes).
+     */
+    public const TYPE_ACCOUNT = 'account';
 
-    public const TYPE_OPPORTUNITY = Opportunity::class;
+    public const TYPE_OPPORTUNITY = 'opportunity';
 
     /**
      * @var list<string>
@@ -25,13 +28,15 @@ class AssistantRecommendationDismissal extends Model
     ];
 
     /**
-     * Canonical morph class names accepted on dismiss (and emitted in Home payloads).
+     * Accepted dismiss payload types: short aliases plus legacy FQCN values.
      *
      * @var list<string>
      */
     public const RECOMMENDABLE_TYPES = [
         self::TYPE_ACCOUNT,
         self::TYPE_OPPORTUNITY,
+        Account::class,
+        Opportunity::class,
     ];
 
     /**
@@ -45,27 +50,27 @@ class AssistantRecommendationDismissal extends Model
     ];
 
     /**
-     * Canonical morph type for storage and comparison.
+     * Canonical morph alias for storage, Home payloads, and comparison.
      */
     public static function canonicalizeRecommendableType(string $type): string
     {
         return match ($type) {
-            'account', self::TYPE_ACCOUNT => self::TYPE_ACCOUNT,
-            'opportunity', self::TYPE_OPPORTUNITY => self::TYPE_OPPORTUNITY,
+            'account', Account::class => self::TYPE_ACCOUNT,
+            'opportunity', Opportunity::class => self::TYPE_OPPORTUNITY,
             default => $type,
         };
     }
 
     /**
-     * Canonical type plus legacy short slugs that may still exist in older rows.
+     * Canonical alias plus legacy FQCN rows that may still exist.
      *
      * @return list<string>
      */
     public static function recommendableTypeKeys(string $type): array
     {
         return match (self::canonicalizeRecommendableType($type)) {
-            self::TYPE_ACCOUNT => [self::TYPE_ACCOUNT, 'account'],
-            self::TYPE_OPPORTUNITY => [self::TYPE_OPPORTUNITY, 'opportunity'],
+            self::TYPE_ACCOUNT => [self::TYPE_ACCOUNT, Account::class],
+            self::TYPE_OPPORTUNITY => [self::TYPE_OPPORTUNITY, Opportunity::class],
             default => [$type],
         };
     }

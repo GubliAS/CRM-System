@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ResetPasswordQueued;
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -109,7 +109,7 @@ test('a password reset notification is sent through the configured mailer', func
         'email' => $user->email,
     ]);
 
-    Notification::assertSentTo($user, ResetPassword::class);
+    Notification::assertSentTo($user, ResetPasswordQueued::class);
 });
 
 test('registration rejects a password that breaks the policy', function () {

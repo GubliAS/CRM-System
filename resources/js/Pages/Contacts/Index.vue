@@ -96,13 +96,22 @@ function changePerPage(event) {
                         Showing {{ contacts.from ?? 0 }}–{{ contacts.to ?? 0 }} of {{ contacts.total }}
                     </p>
                 </div>
-                <Link
-                    v-if="can.create"
-                    :href="route('contacts.create')"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
-                >
-                    New contact
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                    <a
+                        v-if="can.export"
+                        :href="route('contacts.export', listQuery())"
+                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small"
+                    >
+                        Export CSV
+                    </a>
+                    <Link
+                        v-if="can.create"
+                        :href="route('contacts.create')"
+                        class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    >
+                        New contact
+                    </Link>
+                </div>
             </div>
 
             <div class="mt-4 flex flex-wrap gap-2">

@@ -2,11 +2,13 @@
 
 namespace App\Actions\Leads;
 
+use App\Mail\OwnerChangedMail;
 use App\Models\ActivityLog;
 use App\Models\Event;
 use App\Models\Lead;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\OutboundMail;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
@@ -66,7 +68,21 @@ class ChangeLeadOwner
                 ],
             ]);
 
-            return $lead->fresh();
+            $lead = $lead->fresh(['owner']);
+
+            if ($newOwnerId !== (int) $previousOwnerId && $lead?->owner) {
+                $label = trim(($lead->first_name ? $lead->first_name.' ' : '').$lead->last_name);
+                OutboundMail::queueAndLog(
+                    $actor,
+                    $lead->owner,
+                    $lead,
+                    'Owner change notification sent.',
+                    OwnerChangedMail::class,
+                    [$lead, $lead->owner, $actor, 'lead '.$label],
+                );
+            }
+
+            return $lead;
         });
     }
 }

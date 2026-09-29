@@ -11,6 +11,7 @@ use App\Http\Requests\UpdateAccountRequest;
 use App\Models\Account;
 use App\Models\Contact;
 use App\Models\User;
+use App\Support\CsvExporter;
 use App\Support\Picklists;
 use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,6 +20,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AccountController extends Controller
 {
@@ -104,8 +106,58 @@ class AccountController extends Controller
             ],
             'can' => [
                 'create' => $user->can('create', Account::class),
+                'export' => $user->can('viewAny', Account::class),
             ],
         ]);
+    }
+
+    public function export(Request $request, CsvExporter $exporter): StreamedResponse
+    {
+        $this->authorize('viewAny', Account::class);
+
+        $user = $request->user();
+        $search = trim($request->string('search')->toString());
+        $view = $request->string('view')->toString();
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
+
+        $accounts = Account::query()
+            ->visibleTo($user)
+            ->with(['owner:id,name']);
+
+        $useRecent = $view === 'recent' && $search === '';
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($accounts, Account::class, RecentlyViewed::ids($user, Account::class));
+        }
+
+        if ($search !== '') {
+            $like = $this->like($search);
+            $accounts->where(function (Builder $query) use ($like): void {
+                $query->where('name', 'like', $like)
+                    ->orWhere('phone', 'like', $like)
+                    ->orWhere('industry', 'like', $like);
+            });
+        }
+
+        $rows = $accounts->orderBy('name')->orderBy('id')->limit(200)->get()
+            ->map(fn (Account $account): array => [
+                $account->name,
+                $account->phone,
+                $account->type,
+                $account->industry,
+                $account->annual_revenue,
+                $account->owner?->name,
+            ]);
+
+        return $exporter->download('accounts.csv', [
+            'Name',
+            'Phone',
+            'Type',
+            'Industry',
+            'Annual revenue',
+            'Owner',
+        ], $rows);
     }
 
     public function create(Request $request): Response
