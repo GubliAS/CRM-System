@@ -1,17 +1,33 @@
 <script setup>
+import PipelineDonut from '@/Components/PipelineDonut.vue';
+import TableHeadIcon from '@/Components/TableHeadIcon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { formatDay, formatMoney } from '@/display';
+import { Icon } from '@iconify/vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const CLOSED_WON = 'Closed Won';
 const CLOSED_LOST = 'Closed Lost';
-const DONUT_RADIUS = 40;
-const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+// Open stages in pipeline order (OpportunityStage::PROBABILITIES).
+const OPEN_STAGES = [
+    'Qualification',
+    'Meeting Scheduled',
+    'Proposal/Price Quote',
+    'Negotiation/Review',
+];
 
-const CHART_WIDTH = 640;
-const CHART_HEIGHT = 280;
-const CHART_PAD = { top: 16, right: 12, bottom: 36, left: 40 };
+// Curve geometry (SVG user units, stretched to the card width).
+const CURVE_WIDTH = 300;
+const CURVE_HEIGHT = 88;
+const CURVE_PAD = 6;
+
+// Pie colors follow the CRM tokens (the invoice pie used its own palette).
+const MIX_COLORS = {
+    open: 'var(--color-secondary)',
+    won: 'var(--color-primary)',
+    lost: 'var(--color-chart-c)',
+};
 
 const props = defineProps({
     year: { type: Number, required: true },
@@ -25,7 +41,48 @@ const props = defineProps({
     recommendations: { type: Array, required: true },
 });
 
-const chartPeriod = ref('monthly');
+// Row action menu: fixed-positioned (like the Invoice system's portalled menu)
+// so the table's horizontal scroll container can't clip it.
+const rowMenu = ref(null);
+
+function toggleRowMenu(event, opportunity) {
+    if (rowMenu.value?.deal.id === opportunity.id) {
+        rowMenu.value = null;
+        return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = 176;
+
+    rowMenu.value = {
+        deal: opportunity,
+        top: rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+    };
+}
+
+function closeRowMenu() {
+    rowMenu.value = null;
+}
+
+function onDocumentKey(event) {
+    if (event.key === 'Escape') {
+        closeRowMenu();
+    }
+}
+
+onMounted(() => {
+    document.addEventListener('keydown', onDocumentKey);
+    window.addEventListener('scroll', closeRowMenu, true);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener('keydown', onDocumentKey);
+    window.removeEventListener('scroll', closeRowMenu, true);
+});
+
+const chartMetric = ref('value');
+const hoveredStage = ref(null);
 
 const todayDate = computed(() => {
     const now = new Date();
@@ -50,6 +107,10 @@ const openPipelineValue = computed(() =>
     ),
 );
 
+const openDealCount = computed(() =>
+    openPipelineRows.value.reduce((sum, row) => sum + (Number(row.count) || 0), 0),
+);
+
 const closedWon = computed(
     () => props.pipeline.find((row) => row.stage === CLOSED_WON) ?? null,
 );
@@ -60,192 +121,191 @@ const closedLost = computed(
 
 const wonValue = computed(() => Number(closedWon.value?.value) || 0);
 const lostValue = computed(() => Number(closedLost.value?.value) || 0);
+const wonCount = computed(() => Number(closedWon.value?.count) || 0);
+const lostCount = computed(() => Number(closedLost.value?.count) || 0);
 
 const winRate = computed(() => {
-    const won = Number(closedWon.value?.count) || 0;
-    const lost = Number(closedLost.value?.count) || 0;
-    const closed = won + lost;
+    const closed = wonCount.value + lostCount.value;
 
     if (closed === 0) {
         return null;
     }
 
-    return roundPercent((won / closed) * 100);
+    return roundPercent((wonCount.value / closed) * 100);
 });
 
-const winRateLabel = computed(() => {
-    if (winRate.value === null) {
-        return '—';
-    }
-
-    return formatPercent(winRate.value);
-});
-
-const tasksDueCount = computed(() => props.tasksDueToday.length);
-const eventsTodayCount = computed(() => props.eventsToday.length);
-const pipelineIsEmpty = computed(() => Number(props.pipelineTotal) === 0);
+const winRateLabel = computed(() =>
+    winRate.value === null ? '—' : formatPercent(winRate.value),
+);
 
 const dealCountTotal = computed(() =>
     props.pipeline.reduce((sum, row) => sum + (Number(row.count) || 0), 0),
 );
 
-const chartHeadline = computed(() => {
-    if (chartPeriod.value === 'daily') {
-        return `Open deals : ${openPipelineRows.value.reduce((sum, row) => sum + (Number(row.count) || 0), 0)}`;
-    }
+const pipelineIsEmpty = computed(() => Number(props.pipelineTotal) === 0);
+const revenueIsEmpty = computed(() => Number(props.revenueBySourceTotal) === 0);
 
-    if (chartPeriod.value === 'weekly') {
-        return `Open pipeline : ${formatMoney(openPipelineValue.value)}`;
-    }
+/* Stage column chart ---------------------------------------------------- */
 
-    return `Total pipeline : ${formatMoney(props.pipelineTotal)}`;
-});
+const stageBars = computed(() => {
+    const metric = chartMetric.value === 'count' ? 'count' : 'value';
+    const max = Math.max(0, ...props.pipeline.map((row) => Number(row[metric]) || 0));
 
-const showValueBars = computed(
-    () => chartPeriod.value === 'weekly' || chartPeriod.value === 'monthly',
-);
-
-const showCountBars = computed(
-    () => chartPeriod.value === 'daily' || chartPeriod.value === 'monthly',
-);
-
-const chartPlot = computed(() => {
-    const innerWidth = CHART_WIDTH - CHART_PAD.left - CHART_PAD.right;
-    const innerHeight = CHART_HEIGHT - CHART_PAD.top - CHART_PAD.bottom;
-    const stages = props.pipeline;
-    const count = Math.max(stages.length, 1);
-    const groupWidth = innerWidth / count;
-    const maxValue = Math.max(
-        0,
-        ...stages.map((row) => Number(row.value) || 0),
-    );
-    const maxCount = Math.max(
-        0,
-        ...stages.map((row) => Number(row.count) || 0),
-    );
-    const empty = pipelineIsEmpty.value;
-
-    const dual = showValueBars.value && showCountBars.value;
-    const barWidth = dual ? Math.min(14, groupWidth * 0.28) : Math.min(22, groupWidth * 0.45);
-    const barGap = dual ? 4 : 0;
-
-    const groups = stages.map((row, index) => {
-        const value = Number(row.value) || 0;
-        const deals = Number(row.count) || 0;
-        const valueRatio = empty || maxValue <= 0 ? 0.12 : value / maxValue;
-        const countRatio = empty || maxCount <= 0 ? 0.12 : deals / maxCount;
-        const valueHeight = Math.max(valueRatio * innerHeight, empty ? innerHeight * 0.12 : value > 0 ? 6 : 2);
-        const countHeight = Math.max(countRatio * innerHeight, empty ? innerHeight * 0.12 : deals > 0 ? 6 : 2);
-        const centerX = CHART_PAD.left + groupWidth * index + groupWidth / 2;
-        const pairWidth = dual ? barWidth * 2 + barGap : barWidth;
-        const startX = centerX - pairWidth / 2;
-
-        const bars = [];
-
-        if (showValueBars.value) {
-            bars.push({
-                key: `${row.stage}-value`,
-                className: empty || value <= 0 ? 'crm-home-bar-muted' : 'crm-home-bar-a',
-                x: startX,
-                y: CHART_PAD.top + innerHeight - valueHeight,
-                width: barWidth,
-                height: valueHeight,
-            });
-        }
-
-        if (showCountBars.value) {
-            bars.push({
-                key: `${row.stage}-count`,
-                className: empty || deals <= 0 ? 'crm-home-bar-muted' : 'crm-home-bar-b',
-                x: startX + (showValueBars.value ? barWidth + barGap : 0),
-                y: CHART_PAD.top + innerHeight - countHeight,
-                width: barWidth,
-                height: countHeight,
-            });
-        }
+    return props.pipeline.map((row) => {
+        const amount = Number(row[metric]) || 0;
 
         return {
             stage: row.stage,
             href: row.href,
             label: stageShortLabel(row.stage),
-            labelX: centerX,
-            labelY: CHART_HEIGHT - 12,
-            value,
-            count: deals,
+            value: Number(row.value) || 0,
+            count: Number(row.count) || 0,
             percent: Number(row.percent) || 0,
-            bars,
+            fill: max > 0 ? Math.max((amount / max) * 100, amount > 0 ? 4 : 0) : 0,
         };
     });
-
-    const grid = [0, 0.33, 0.66, 1].map((ratio) => {
-        const y = CHART_PAD.top + innerHeight * (1 - ratio);
-
-        return {
-            key: `grid-${ratio}`,
-            y,
-            label: empty
-                ? ratio === 0
-                    ? '0'
-                    : ''
-                : formatAxisTick(ratio, maxValue, maxCount),
-        };
-    });
-
-    return {
-        groups,
-        grid,
-        baselineY: CHART_PAD.top + innerHeight,
-        left: CHART_PAD.left,
-        right: CHART_WIDTH - CHART_PAD.right,
-    };
 });
+
+/* Pipeline mix donut ---------------------------------------------------- */
 
 const mixTotal = computed(
     () => openPipelineValue.value + wonValue.value + lostValue.value,
 );
 
-const mixSlices = computed(() => {
-    const total = mixTotal.value;
-    const raw = [
-        { key: 'open', label: 'Open', value: openPipelineValue.value },
-        { key: 'won', label: 'Won', value: wonValue.value },
-        { key: 'lost', label: 'Lost', value: lostValue.value },
-    ];
+const mixSlices = computed(() => [
+    { key: 'open', name: 'Open pipeline', value: openPipelineValue.value },
+    { key: 'won', name: 'Closed won', value: wonValue.value },
+    { key: 'lost', name: 'Closed lost', value: lostValue.value },
+].map((slice) => ({
+    ...slice,
+    color: MIX_COLORS[slice.key],
+    display: formatMoney(slice.value),
+})));
 
-    if (total <= 0) {
-        return [];
-    }
+const mixIsEmpty = computed(() => mixTotal.value <= 0);
 
-    let offset = 0;
+const mixCenterValue = computed(() =>
+    mixTotal.value.toLocaleString(undefined, {
+        maximumFractionDigits: mixTotal.value >= 1000 ? 0 : 2,
+    }),
+);
 
-    return raw.map((slice, index) => {
-        const percent = roundPercent((slice.value / total) * 100);
-        const length = (percent / 100) * DONUT_CIRCUMFERENCE;
-        const mapped = {
-            ...slice,
-            index,
-            percent,
-            length,
-            offset: -offset,
-            dasharray: `${length} ${DONUT_CIRCUMFERENCE - length}`,
-        };
-        offset += length;
+/* Next key deal to close ------------------------------------------------ */
 
-        return mapped;
-    });
-});
+const nextDeal = computed(() => {
+    const today = new Date(`${todayDate.value}T00:00:00`);
+    const dated = props.keyOpportunities
+        .filter((deal) => deal.close_date)
+        .map((deal) => ({
+            ...deal,
+            days: Math.round(
+                (new Date(`${deal.close_date}T00:00:00`) - today) / 86400000,
+            ),
+        }));
 
-const mixIsEmpty = computed(() => mixSlices.value.length === 0);
-
-const donutCenterPercent = computed(() => {
-    if (mixIsEmpty.value) {
+    if (dated.length === 0) {
         return null;
     }
 
-    const won = mixSlices.value.find((slice) => slice.key === 'won');
+    // Soonest upcoming close; if everything is overdue, the most recent miss.
+    const upcoming = dated.filter((deal) => deal.days >= 0).sort((a, b) => a.days - b.days);
+    const deal = upcoming[0] ?? dated.sort((a, b) => b.days - a.days)[0];
 
-    return won?.percent ?? mixSlices.value[0]?.percent ?? null;
+    return { ...deal, stageIndex: Math.max(OPEN_STAGES.indexOf(deal.stage), 0) };
 });
+
+/* Side cards ------------------------------------------------------------ */
+
+const closedSplit = computed(() => {
+    const closed = wonValue.value + lostValue.value;
+
+    if (closed <= 0) {
+        return null;
+    }
+
+    const lost = roundPercent((lostValue.value / closed) * 100);
+
+    return { lost, won: roundPercent(100 - lost) };
+});
+
+const sourceBars = computed(() => {
+    const rows = props.revenueBySource;
+    const max = Math.max(0, ...rows.map((row) => Number(row.value) || 0));
+    const topIndex = rows.findIndex((row) => (Number(row.value) || 0) === max);
+
+    return rows.map((row, index) => {
+        const value = Number(row.value) || 0;
+
+        return {
+            source: row.source,
+            value,
+            percent: Number(row.percent) || 0,
+            height: max > 0 ? `${Math.max((value / max) * 100, value > 0 ? 6 : 0)}%` : '0%',
+            top: max > 0 && index === topIndex,
+        };
+    });
+});
+
+const sourceAverageBottom = computed(() => {
+    const rows = props.revenueBySource;
+    const max = Math.max(0, ...rows.map((row) => Number(row.value) || 0));
+
+    if (rows.length < 2 || max <= 0) {
+        return null;
+    }
+
+    const avg = rows.reduce((sum, row) => sum + (Number(row.value) || 0), 0) / rows.length;
+
+    // Mini bars sit above a ~1.45rem label row; keep the line inside the bar area.
+    return `calc(1.45rem + (100% - 1.45rem) * ${avg / max})`;
+});
+
+const stageCurve = computed(() => {
+    const counts = props.pipeline.map((row) => Number(row.count) || 0);
+
+    if (counts.length < 2) {
+        return null;
+    }
+
+    const max = Math.max(1, ...counts);
+    const step = (CURVE_WIDTH - CURVE_PAD * 2) / (counts.length - 1);
+    const points = counts.map((count, index) => ({
+        x: CURVE_PAD + step * index,
+        y: CURVE_PAD + (CURVE_HEIGHT - CURVE_PAD * 2) * (1 - count / max),
+    }));
+
+    const line = smoothPath(points);
+    const last = points[points.length - 1];
+    const area = `${line} L ${last.x} ${CURVE_HEIGHT} L ${points[0].x} ${CURVE_HEIGHT} Z`;
+
+    return { line, area, last };
+});
+
+/* Today list ------------------------------------------------------------ */
+
+const todayItems = computed(() => {
+    const tasks = props.tasksDueToday.map((task) => ({
+        key: `task-${task.id}`,
+        kind: 'task',
+        title: task.subject,
+        meta: task.related_label || `Priority: ${task.priority ?? '—'}`,
+        tag: task.status,
+        url: task.url,
+    }));
+
+    const events = props.eventsToday.map((event) => ({
+        key: `event-${event.id}`,
+        kind: 'event',
+        title: event.subject,
+        meta: event.location || event.related_label || 'Event',
+        tag: event.all_day ? 'All day' : formatClock(event.starts_at),
+        url: event.url,
+    }));
+
+    return [...events, ...tasks].slice(0, 6);
+});
+
+/* Helpers --------------------------------------------------------------- */
 
 function roundMoney(value) {
     return Math.round((Number(value) || 0) * 100) / 100;
@@ -259,18 +319,6 @@ function formatPercent(value) {
     const amount = Number(value) || 0;
 
     return `${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(1)}%`;
-}
-
-function formatAxisTick(ratio, maxValue, maxCount) {
-    if (showValueBars.value && !showCountBars.value) {
-        return abbreviateMoney(maxValue * ratio);
-    }
-
-    if (showCountBars.value && !showValueBars.value) {
-        return String(Math.round(maxCount * ratio));
-    }
-
-    return abbreviateMoney(maxValue * ratio);
 }
 
 function abbreviateMoney(value) {
@@ -287,10 +335,24 @@ function abbreviateMoney(value) {
     return String(Math.round(amount));
 }
 
+function formatClock(value) {
+    if (!value) {
+        return '—';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return '—';
+    }
+
+    return new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(date);
+}
+
 function stageShortLabel(stage) {
     const labels = {
-        Qualification: 'Qual',
-        'Meeting Scheduled': 'Meet',
+        Qualification: 'Qualify',
+        'Meeting Scheduled': 'Meeting',
         'Proposal/Price Quote': 'Proposal',
         'Negotiation/Review': 'Negotiate',
         'Closed Won': 'Won',
@@ -300,14 +362,43 @@ function stageShortLabel(stage) {
     return labels[stage] ?? stage;
 }
 
-function suggestionInitial(title) {
-    const text = String(title || '').trim();
+// Catmull-Rom through the points, emitted as cubic Béziers.
+function smoothPath(points) {
+    let d = `M ${points[0].x} ${points[0].y}`;
 
-    if (!text) {
-        return '?';
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i - 1] ?? points[i];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[i + 2] ?? p2;
+        const c1x = p1.x + (p2.x - p0.x) / 6;
+        const c1y = p1.y + (p2.y - p0.y) / 6;
+        const c2x = p2.x - (p3.x - p1.x) / 6;
+        const c2y = p2.y - (p3.y - p1.y) / 6;
+
+        d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
     }
 
-    return text.charAt(0).toUpperCase();
+    return d;
+}
+
+function initial(text) {
+    const value = String(text || '').trim();
+
+    return value ? value.charAt(0).toUpperCase() : '?';
+}
+
+const STAGE_TAGS = {
+    Qualification: 'crm-ov-tag-draft',
+    'Meeting Scheduled': 'crm-ov-tag-pending',
+    'Proposal/Price Quote': 'crm-ov-tag-open',
+    'Negotiation/Review': 'crm-ov-tag-partial',
+    'Closed Won': 'crm-ov-tag-won',
+    'Closed Lost': 'crm-ov-tag-lost',
+};
+
+function stageTagClass(stage) {
+    return `crm-ov-tag ${STAGE_TAGS[stage] ?? ''}`;
 }
 
 function suggestionKind(recommendation) {
@@ -320,13 +411,6 @@ function suggestionKind(recommendation) {
     }
 
     return 'Item';
-}
-
-function suggestionCode(recommendation) {
-    const prefix =
-        recommendation.recommendable_type === 'account' ? 'ACC' : 'OPP';
-
-    return `${prefix}${String(recommendation.recommendable_id).padStart(5, '0')}`;
 }
 
 function dismissRecommendation(recommendation) {
@@ -346,600 +430,593 @@ function dismissRecommendation(recommendation) {
     <AuthenticatedLayout>
         <Head title="Home" />
 
-        <div class="crm-page py-5 sm:py-6">
-            <div class="crm-home-stack">
-                <header
-                    class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
-                >
-                    <div class="min-w-0">
-                        <h1 class="text-h1">Home</h1>
-                        <p class="mt-1 text-body text-text-muted">
-                            Pipeline and revenue for {{ year }}, plus today’s tasks and events.
-                        </p>
-                    </div>
-                    <p
-                        class="crm-chip inline-flex min-h-11 shrink-0 items-center px-3 text-small font-semibold"
-                        aria-label="Reporting year"
-                    >
-                        Reporting year {{ year }}
-                    </p>
-                </header>
+        <template #header>
+            <div class="min-w-0">
+                <h1 class="crm-page-title">Overview</h1>
+                <p class="crm-page-subtitle">
+                    Pipeline and revenue for {{ year }}, plus today’s tasks and events.
+                </p>
+            </div>
+        </template>
 
-                <section class="crm-home-metrics" aria-label="Home summary">
-                    <div
-                        class="crm-home-metric crm-home-metric-primary"
-                        role="status"
-                    >
-                        <span class="crm-home-metric-icon" aria-hidden="true">
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.75"
-                                class="h-5 w-5"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M3 17l6-6 4 4 7-7"
-                                />
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M14 8h6v6"
-                                />
-                            </svg>
-                        </span>
-                        <div class="min-w-0">
-                            <p class="crm-home-metric-value tabular-nums">
-                                {{ formatMoney(openPipelineValue) }}
-                            </p>
-                            <p class="crm-home-metric-label">Open pipeline</p>
-                        </div>
-                    </div>
-
-                    <div class="crm-home-metric" role="status">
-                        <span
-                            class="crm-home-metric-icon crm-home-tile-lilac"
-                            aria-hidden="true"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.75"
-                                class="h-5 w-5"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                            </svg>
-                        </span>
-                        <div class="min-w-0">
-                            <p class="crm-home-metric-value text-text tabular-nums">
-                                {{ winRateLabel }}
-                            </p>
-                            <p class="crm-home-metric-label">Win rate</p>
-                        </div>
-                    </div>
-
-                    <Link
-                        :href="route('tasks.index', { view: 'today' })"
-                        class="crm-home-metric focus:outline-none focus:ring-2 focus:ring-secondary"
-                    >
-                        <span
-                            class="crm-home-metric-icon crm-home-tile-peach"
-                            aria-hidden="true"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.75"
-                                class="h-5 w-5"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M9 12.75L11.25 15 15 9.75M4.5 6.75h15M6 6.75V5.25A1.5 1.5 0 017.5 3.75h9A1.5 1.5 0 0118 5.25v1.5"
-                                />
-                            </svg>
-                        </span>
-                        <div class="min-w-0">
-                            <p class="crm-home-metric-value text-text tabular-nums">
-                                {{ tasksDueCount }}
-                            </p>
-                            <p class="crm-home-metric-label">Tasks due today</p>
-                        </div>
-                    </Link>
-
-                    <Link
-                        :href="
-                            route('events.index', {
-                                view: 'day',
-                                date: todayDate,
-                            })
-                        "
-                        class="crm-home-metric focus:outline-none focus:ring-2 focus:ring-secondary"
-                    >
-                        <span
-                            class="crm-home-metric-icon crm-home-tile-sky"
-                            aria-hidden="true"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.75"
-                                class="h-5 w-5"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M6.75 3v2.25M17.25 3v2.25M3.75 8.25h16.5M4.5 6.75h15A1.5 1.5 0 0121 8.25v11.25A1.5 1.5 0 0119.5 21h-15A1.5 1.5 0 013 19.5V8.25a1.5 1.5 0 011.5-1.5z"
-                                />
-                            </svg>
-                        </span>
-                        <div class="min-w-0">
-                            <p class="crm-home-metric-value text-text tabular-nums">
-                                {{ eventsTodayCount }}
-                            </p>
-                            <p class="crm-home-metric-label">Events today</p>
-                        </div>
-                    </Link>
-                </section>
-
-                <div class="crm-home-split">
-                    <section
-                        class="crm-home-panel"
-                        aria-labelledby="home-pipeline-heading"
-                    >
-                        <div
-                            class="flex flex-wrap items-start justify-between gap-3"
-                        >
+        <div class="crm-page max-w-none px-4 py-4 sm:px-5">
+            <div class="crm-ov">
+                <!-- Main column -->
+                <div class="crm-ov-col">
+                    <div class="crm-ov-top">
+                    <!-- Stage column chart -->
+                    <section class="crm-ov-card" aria-labelledby="ov-pipeline-heading">
+                        <div class="crm-ov-head">
                             <div class="min-w-0">
-                                <h2 id="home-pipeline-heading" class="text-h2">
-                                    Pipeline overview
+                                <h2 id="ov-pipeline-heading" class="crm-ov-title">
+                                    Pipeline by stage
                                 </h2>
-                                <p class="crm-home-headline">
-                                    {{ chartHeadline }}
-                                </p>
+                                <div class="crm-ov-legend">
+                                    <span class="crm-ov-legend-item">
+                                        <span
+                                            class="crm-ov-dot"
+                                            style="background: var(--color-chart-soft)"
+                                        />
+                                        {{ chartMetric === 'value' ? 'Value' : 'Deals' }}
+                                    </span>
+                                    <span class="crm-ov-legend-item">
+                                        <span
+                                            class="crm-ov-dot"
+                                            style="background: var(--color-primary)"
+                                        />
+                                        Hovered stage
+                                    </span>
+                                </div>
                             </div>
                             <div
-                                class="crm-home-period"
+                                class="crm-ov-seg"
                                 role="tablist"
-                                aria-label="Pipeline chart period"
+                                aria-label="Chart metric"
                             >
                                 <button
                                     type="button"
                                     role="tab"
-                                    class="crm-home-period-btn"
-                                    :class="
-                                        chartPeriod === 'daily'
-                                            ? 'crm-home-period-btn-active'
-                                            : ''
-                                    "
-                                    :aria-selected="chartPeriod === 'daily'"
-                                    @click="chartPeriod = 'daily'"
+                                    class="crm-ov-seg-btn"
+                                    :class="chartMetric === 'value' ? 'crm-ov-seg-btn-active' : ''"
+                                    :aria-selected="chartMetric === 'value'"
+                                    @click="chartMetric = 'value'"
                                 >
-                                    Daily
+                                    Value
                                 </button>
                                 <button
                                     type="button"
                                     role="tab"
-                                    class="crm-home-period-btn"
-                                    :class="
-                                        chartPeriod === 'weekly'
-                                            ? 'crm-home-period-btn-active'
-                                            : ''
-                                    "
-                                    :aria-selected="chartPeriod === 'weekly'"
-                                    @click="chartPeriod = 'weekly'"
+                                    class="crm-ov-seg-btn"
+                                    :class="chartMetric === 'count' ? 'crm-ov-seg-btn-active' : ''"
+                                    :aria-selected="chartMetric === 'count'"
+                                    @click="chartMetric = 'count'"
                                 >
-                                    Weekly
-                                </button>
-                                <button
-                                    type="button"
-                                    role="tab"
-                                    class="crm-home-period-btn"
-                                    :class="
-                                        chartPeriod === 'monthly'
-                                            ? 'crm-home-period-btn-active'
-                                            : ''
-                                    "
-                                    :aria-selected="chartPeriod === 'monthly'"
-                                    @click="chartPeriod = 'monthly'"
-                                >
-                                    Monthly
+                                    Deals
                                 </button>
                             </div>
                         </div>
 
-                        <div class="crm-home-legend" aria-hidden="true">
-                            <span
-                                v-if="showValueBars"
-                                class="crm-home-legend-item"
-                            >
-                                <span class="crm-home-swatch crm-home-swatch-a" />
-                                Pipeline value
-                            </span>
-                            <span
-                                v-if="showCountBars"
-                                class="crm-home-legend-item"
-                            >
-                                <span class="crm-home-swatch crm-home-swatch-b" />
-                                Deal count
-                            </span>
-                        </div>
-
-                        <p
-                            v-if="pipelineIsEmpty"
-                            class="mb-2 rounded-xl bg-bg px-3 py-2 text-small text-text-muted"
-                            role="status"
-                        >
-                            No pipeline opportunities for {{ year }}. Stage bars still link to filtered lists.
+                        <p v-if="pipelineIsEmpty" class="crm-ov-empty" role="status">
+                            No pipeline opportunities for {{ year }}. Stage columns still
+                            link to filtered lists.
                         </p>
 
                         <div
-                            class="crm-home-bars"
-                            role="img"
+                            class="crm-ov-bars"
                             :aria-label="`Pipeline chart for ${year}. ${dealCountTotal} deals totaling ${formatMoney(pipelineTotal)}.`"
+                            @mouseleave="hoveredStage = null"
                         >
-                            <svg
-                                :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
-                                preserveAspectRatio="xMidYMid meet"
+                            <button
+                                v-for="bar in stageBars"
+                                :key="bar.stage"
+                                type="button"
+                                class="crm-ov-bar-col"
+                                :class="hoveredStage === bar.stage ? 'crm-ov-bar-col-active' : ''"
+                                :aria-label="`${bar.stage}: ${bar.count} opportunities, ${formatMoney(bar.value)}, ${formatPercent(bar.percent)} of pipeline`"
+                                @mouseenter="hoveredStage = bar.stage"
+                                @focus="hoveredStage = bar.stage"
+                                @blur="hoveredStage = null"
+                                @click="router.visit(bar.href)"
                             >
-                                <line
-                                    v-for="line in chartPlot.grid"
-                                    :key="line.key"
-                                    class="crm-home-bars-grid"
-                                    :x1="chartPlot.left"
-                                    :x2="chartPlot.right"
-                                    :y1="line.y"
-                                    :y2="line.y"
-                                />
-                                <text
-                                    v-for="line in chartPlot.grid"
-                                    :key="`${line.key}-label`"
-                                    class="crm-home-bars-axis"
-                                    :x="chartPlot.left - 8"
-                                    :y="line.y + 3"
-                                    text-anchor="end"
-                                >
-                                    {{ line.label }}
-                                </text>
-
-                                <g
-                                    v-for="group in chartPlot.groups"
-                                    :key="group.stage"
-                                    class="cursor-pointer"
-                                    role="link"
-                                    tabindex="0"
-                                    :aria-label="`${group.stage}: ${group.count} opportunities, ${formatMoney(group.value)}, ${formatPercent(group.percent)} of pipeline`"
-                                    @click="router.visit(group.href)"
-                                    @keydown.enter.prevent="router.visit(group.href)"
-                                    @keydown.space.prevent="router.visit(group.href)"
-                                >
-                                    <rect
-                                        v-for="bar in group.bars"
-                                        :key="bar.key"
-                                        :class="bar.className"
-                                        :x="bar.x"
-                                        :y="bar.y"
-                                        :width="bar.width"
-                                        :height="bar.height"
-                                        rx="4"
-                                        ry="4"
+                                <span class="crm-ov-bar-track">
+                                    <span
+                                        v-if="bar.fill < 100"
+                                        class="crm-ov-bar-rest"
+                                        :style="{ flexGrow: 100 - bar.fill }"
                                     />
-                                    <text
-                                        class="crm-home-bars-axis"
-                                        :x="group.labelX"
-                                        :y="group.labelY"
-                                        text-anchor="middle"
+                                    <span
+                                        class="crm-ov-bar-fill"
+                                        :style="{ flexGrow: bar.fill }"
+                                    />
+                                    <span
+                                        v-if="hoveredStage === bar.stage"
+                                        class="crm-ov-tip"
+                                        aria-hidden="true"
                                     >
-                                        {{ group.label }}
-                                    </text>
-                                </g>
-                            </svg>
+                                        <span class="crm-ov-tip-title block">{{ bar.stage }}</span>
+                                        <span class="crm-ov-tip-row">
+                                            <span class="crm-ov-ring" />
+                                            {{ formatMoney(bar.value) }}
+                                        </span>
+                                        <span class="crm-ov-tip-row">
+                                            <span
+                                                class="crm-ov-dot"
+                                                style="background: var(--color-chart-c)"
+                                            />
+                                            {{ bar.count }} {{ bar.count === 1 ? 'deal' : 'deals' }}
+                                        </span>
+                                    </span>
+                                </span>
+                                <span class="crm-ov-bar-label">{{ bar.label }}</span>
+                            </button>
                         </div>
                     </section>
 
-                    <section
-                        class="crm-home-panel flex flex-col"
-                        aria-labelledby="home-mix-heading"
-                    >
-                        <div
-                            class="flex items-start justify-between gap-2"
-                        >
-                            <div>
-                                <h2 id="home-mix-heading" class="text-h2">
-                                    Pipeline mix
-                                </h2>
-                                <p class="mt-0.5 text-small text-text-muted">
-                                    Open · won · lost · {{ year }}
-                                </p>
-                            </div>
-                            <span class="crm-home-menu" aria-hidden="true">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                    class="h-5 w-5"
-                                >
-                                    <circle cx="12" cy="5" r="1.5" />
-                                    <circle cx="12" cy="12" r="1.5" />
-                                    <circle cx="12" cy="19" r="1.5" />
-                                </svg>
+                    <!-- Next key deal to close -->
+                    <section class="crm-ov-spot" aria-labelledby="ov-spot-heading">
+                        <span class="crm-ov-spot-rings" aria-hidden="true" />
+                        <div class="crm-ov-spot-head">
+                            <h2 id="ov-spot-heading">Next to close</h2>
+                            <span class="crm-ov-spot-chip">
+                                <Icon icon="lucide:flame" aria-hidden="true" />
+                                Key deal
                             </span>
                         </div>
 
-                        <p
-                            v-if="mixIsEmpty"
-                            class="mt-3 rounded-xl bg-bg px-3 py-2 text-small text-text-muted"
-                            role="status"
-                        >
-                            No opportunity amounts for {{ year }}.
-                        </p>
-
-                        <div
-                            class="crm-home-donut-wrap"
-                            :class="mixIsEmpty ? 'opacity-80' : ''"
-                            role="img"
-                            :aria-label="
-                                mixIsEmpty
-                                    ? 'Empty pipeline mix chart'
-                                    : `Pipeline mix: ${mixSlices.map((s) => `${s.label} ${formatPercent(s.percent)}`).join(', ')}`
-                            "
-                        >
-                            <svg viewBox="0 0 120 120" aria-hidden="true">
-                                <circle
-                                    class="crm-home-donut-track"
-                                    cx="60"
-                                    cy="60"
-                                    :r="DONUT_RADIUS"
-                                />
-                                <circle
-                                    v-for="slice in mixSlices"
-                                    :key="slice.key"
-                                    class="crm-home-donut-seg"
-                                    :class="`crm-home-donut-seg-${slice.index}`"
-                                    cx="60"
-                                    cy="60"
-                                    :r="DONUT_RADIUS"
-                                    :style="{
-                                        strokeDasharray: slice.dasharray,
-                                        strokeDashoffset: slice.offset,
-                                    }"
-                                />
-                            </svg>
-                            <div class="crm-home-donut-center">
-                                <p class="crm-home-donut-pct tabular-nums">
-                                    {{
-                                        donutCenterPercent === null
-                                            ? '—'
-                                            : formatPercent(donutCenterPercent)
-                                    }}
-                                </p>
-                                <p class="crm-home-donut-caption">
-                                    {{ mixIsEmpty ? 'No pipeline yet' : 'Won share' }}
-                                </p>
+                        <template v-if="nextDeal">
+                            <div class="crm-ov-spot-countdown">
+                                <span class="crm-ov-spot-days tabular-nums">
+                                    {{ nextDeal.days === 0 ? 'Today' : Math.abs(nextDeal.days) }}
+                                </span>
+                                <span class="crm-ov-spot-days-label">
+                                    {{ nextDeal.days === 0 ? 'is the close date' : nextDeal.days < 0 ? 'days overdue' : nextDeal.days === 1 ? 'day left' : 'days left' }}
+                                </span>
                             </div>
-                        </div>
 
-                        <ul
-                            v-if="!mixIsEmpty"
-                            class="crm-home-donut-legend"
-                            role="list"
-                        >
-                            <li
-                                v-for="slice in mixSlices"
-                                :key="`legend-${slice.key}`"
-                                class="crm-home-legend-item"
-                            >
+                            <Link :href="nextDeal.url" class="crm-ov-spot-name">
+                                {{ nextDeal.name }}
+                            </Link>
+                            <p class="crm-ov-spot-meta">
+                                {{ nextDeal.account?.name ?? 'No account' }}
+                                · closes {{ formatDay(nextDeal.close_date) }}
+                            </p>
+
+                            <p class="crm-ov-spot-amount tabular-nums">
+                                {{ formatMoney(nextDeal.amount) }}
+                            </p>
+
+                            <div class="crm-ov-spot-steps" :aria-label="`Stage: ${nextDeal.stage}`">
                                 <span
-                                    class="crm-home-swatch"
-                                    :class="`crm-home-swatch-${slice.index}`"
-                                    aria-hidden="true"
+                                    v-for="(step, index) in OPEN_STAGES"
+                                    :key="step"
+                                    class="crm-ov-spot-step"
+                                    :class="index <= nextDeal.stageIndex ? 'crm-ov-spot-step-done' : ''"
                                 />
-                                <span class="text-text">{{ slice.label }}</span>
-                                <span class="tabular-nums">{{
-                                    formatPercent(slice.percent)
-                                }}</span>
-                            </li>
-                        </ul>
+                            </div>
+                            <p class="crm-ov-spot-stage">
+                                {{ nextDeal.stage }}
+                                <span>· step {{ nextDeal.stageIndex + 1 }} of {{ OPEN_STAGES.length }}</span>
+                            </p>
+
+                            <Link :href="nextDeal.url" class="crm-ov-spot-cta">
+                                Open deal
+                                <Icon icon="lucide:arrow-up-right" aria-hidden="true" />
+                            </Link>
+                        </template>
+
+                        <p v-else class="crm-ov-spot-meta mt-6">
+                            No open key deals with a close date.
+                        </p>
                     </section>
                 </div>
 
-                <div class="crm-home-split">
-                    <section
-                        class="crm-home-panel"
-                        aria-labelledby="home-deals-heading"
-                    >
-                        <div
-                            class="flex flex-wrap items-center justify-between gap-2 pb-2"
-                        >
-                            <h2 id="home-deals-heading" class="text-h2">
-                                Latest deals
-                            </h2>
+                    <div class="crm-ov-row">
+                        <!-- Pipeline mix donut -->
+                        <section class="crm-ov-card" aria-labelledby="ov-mix-heading">
+                            <div class="crm-ov-head">
+                                <div>
+                                    <h2 id="ov-mix-heading" class="crm-ov-title">
+                                        Pipeline mix
+                                    </h2>
+                                    <p class="crm-ov-sub">Share of {{ year }} value</p>
+                                </div>
+                                <Icon
+                                    icon="lucide:grip"
+                                    class="crm-ov-grip text-text-muted"
+                                    aria-hidden="true"
+                                />
+                            </div>
+
+                            <p v-if="mixIsEmpty" class="crm-ov-empty" role="status">
+                                No opportunity amounts for {{ year }}.
+                            </p>
+                            <PipelineDonut
+                                v-else
+                                :slices="mixSlices"
+                                center-eyebrow="Total"
+                                :center-value="mixCenterValue"
+                                center-sub="Pipeline value"
+                            />
+                        </section>
+
+                        <!-- Today: events + tasks -->
+                        <section class="crm-ov-card" aria-labelledby="ov-today-heading">
+                            <div class="crm-ov-head">
+                                <div>
+                                    <h2 id="ov-today-heading" class="crm-ov-title">
+                                        Today
+                                    </h2>
+                                    <p class="crm-ov-sub">
+                                        {{ eventsToday.length }}
+                                        {{ eventsToday.length === 1 ? 'event' : 'events' }}
+                                        ·
+                                        {{ tasksDueToday.length }}
+                                        {{ tasksDueToday.length === 1 ? 'task' : 'tasks' }} due
+                                    </p>
+                                </div>
+                                <Link
+                                    :href="route('events.index', { view: 'day', date: todayDate })"
+                                    class="crm-ov-icon-link"
+                                    aria-label="Open today’s calendar"
+                                >
+                                    <Icon icon="lucide:arrow-up-right" />
+                                </Link>
+                            </div>
+
+                            <p
+                                v-if="todayItems.length === 0"
+                                class="crm-ov-empty"
+                                role="status"
+                            >
+                                Nothing scheduled or due today.
+                            </p>
+
+                            <ul v-else class="crm-ov-list" role="list">
+                                <li
+                                    v-for="item in todayItems"
+                                    :key="item.key"
+                                    class="crm-ov-item"
+                                >
+                                    <span
+                                        class="crm-ov-avatar"
+                                        :class="item.kind === 'task' ? 'crm-ov-avatar-task' : 'crm-ov-avatar-event'"
+                                        aria-hidden="true"
+                                    >
+                                        <Icon
+                                            :icon="item.kind === 'task' ? 'lucide:list-checks' : 'lucide:calendar'"
+                                        />
+                                    </span>
+                                    <div class="min-w-0 flex-1">
+                                        <Link :href="item.url" class="crm-ov-item-title">
+                                            {{ item.title }}
+                                        </Link>
+                                        <p class="crm-ov-item-meta">{{ item.meta }}</p>
+                                    </div>
+                                    <span class="crm-ov-tag tabular-nums">{{ item.tag }}</span>
+                                </li>
+                            </ul>
+                        </section>
+                    </div>
+
+                    <!-- Key deals table -->
+                    <section class="crm-ov-card" aria-labelledby="ov-deals-heading">
+                        <div class="crm-ov-head mb-3">
+                            <div>
+                                <h2 id="ov-deals-heading" class="crm-ov-title">Key deals</h2>
+                                <p class="crm-ov-sub">Largest open opportunities</p>
+                            </div>
                             <Link
                                 :href="route('opportunities.index')"
-                                class="inline-flex min-h-11 items-center text-body text-secondary underline"
+                                class="crm-ov-icon-link"
+                                aria-label="View all opportunities"
                             >
-                                View all
+                                <Icon icon="lucide:arrow-up-right" />
                             </Link>
                         </div>
 
                         <p
                             v-if="keyOpportunities.length === 0"
-                            class="mt-2 rounded-xl bg-bg px-3 py-2 text-small text-text-muted"
+                            class="crm-ov-empty"
                             role="status"
                         >
                             No open opportunities.
                         </p>
 
-                        <div v-else class="mt-1 overflow-x-auto">
-                            <table class="crm-home-table">
+                        <div v-else class="crm-ov-tablewrap">
+                            <table class="crm-ov-table">
                                 <thead>
                                     <tr>
-                                        <th scope="col">Code</th>
-                                        <th scope="col">Deal</th>
-                                        <th scope="col">Close date</th>
-                                        <th scope="col">Amount</th>
-                                        <th scope="col">Stage</th>
-                                        <th scope="col">Account</th>
+                                        <th scope="col">
+                                            <span class="crm-ov-th"><TableHeadIcon name="id" />Deal</span>
+                                        </th>
+                                        <th scope="col">
+                                            <span class="crm-ov-th"><TableHeadIcon name="client" />Account</span>
+                                        </th>
+                                        <th scope="col">
+                                            <span class="crm-ov-th"><TableHeadIcon name="status" />Stage</span>
+                                        </th>
+                                        <th scope="col">
+                                            <span class="crm-ov-th"><TableHeadIcon name="due" />Close date</span>
+                                        </th>
+                                        <th scope="col">
+                                            <span class="crm-ov-th"><TableHeadIcon name="amount" />Amount</span>
+                                        </th>
+                                        <th scope="col" class="crm-ov-col-center">
+                                            <span class="crm-ov-th"><TableHeadIcon name="actions" />Actions</span>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr
                                         v-for="opportunity in keyOpportunities"
                                         :key="opportunity.id"
+                                        class="crm-ov-row-link"
+                                        @click="router.visit(opportunity.url)"
                                     >
-                                        <td>
-                                            <Link
-                                                :href="opportunity.url"
-                                                class="crm-home-code"
-                                            >
-                                                #{{ opportunity.id }}
-                                            </Link>
-                                        </td>
-                                        <td>
-                                            <div class="flex items-center gap-3">
-                                                <span
-                                                    class="crm-home-thumb"
-                                                    aria-hidden="true"
-                                                >
-                                                    {{
-                                                        suggestionInitial(
-                                                            opportunity.name,
-                                                        )
-                                                    }}
-                                                </span>
-                                                <Link
-                                                    :href="opportunity.url"
-                                                    class="font-semibold text-text hover:text-secondary"
-                                                >
-                                                    {{ opportunity.name }}
-                                                </Link>
-                                            </div>
-                                        </td>
-                                        <td class="text-text-muted">
-                                            {{ formatDay(opportunity.close_date) }}
-                                        </td>
-                                        <td class="font-semibold tabular-nums text-text">
-                                            {{ formatMoney(opportunity.amount) }}
-                                        </td>
-                                        <td class="text-text-muted">
-                                            {{ opportunity.stage }}
-                                        </td>
+                                        <td class="crm-ov-cell-strong">{{ opportunity.name }}</td>
                                         <td>
                                             <Link
                                                 v-if="opportunity.account"
-                                                :href="
-                                                    route(
-                                                        'accounts.show',
-                                                        opportunity.account.id,
-                                                    )
-                                                "
-                                                class="text-secondary"
+                                                :href="route('accounts.show', opportunity.account.id)"
+                                                class="crm-ov-cell-link"
+                                                @click.stop
                                             >
                                                 {{ opportunity.account.name }}
                                             </Link>
-                                            <span v-else class="text-text-muted"
-                                                >—</span
+                                            <span v-else class="text-text-muted">—</span>
+                                        </td>
+                                        <td>
+                                            <span :class="stageTagClass(opportunity.stage)">
+                                                {{ opportunity.stage }}
+                                            </span>
+                                        </td>
+                                        <td>{{ formatDay(opportunity.close_date) }}</td>
+                                        <td class="crm-ov-cell-strong tabular-nums">
+                                            {{ formatMoney(opportunity.amount) }}
+                                        </td>
+                                        <td class="crm-ov-col-center">
+                                            <button
+                                                type="button"
+                                                class="crm-ov-row-btn"
+                                                aria-label="More actions"
+                                                aria-haspopup="menu"
+                                                :aria-expanded="rowMenu?.deal.id === opportunity.id"
+                                                @click.stop="toggleRowMenu($event, opportunity)"
                                             >
+                                                <Icon icon="lucide:ellipsis" />
+                                            </button>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </section>
+                </div>
 
-                    <section
-                        class="crm-home-panel"
-                        aria-labelledby="home-assistant-heading"
-                    >
+                <!-- Side column -->
+                <aside class="crm-ov-side" aria-label="Key figures">
+                    <!-- Open pipeline: dark card with won/lost split -->
+                    <section class="crm-ov-stat crm-ov-stat-dark">
+                        <div class="crm-ov-stat-head">
+                            <h2>Open pipeline</h2>
+                            <Icon icon="lucide:grip" class="crm-ov-grip" aria-hidden="true" />
+                        </div>
+                        <p class="crm-ov-stat-value">{{ formatMoney(openPipelineValue) }}</p>
+                        <p class="crm-ov-stat-sub">
+                            {{ openDealCount }} open {{ openDealCount === 1 ? 'deal' : 'deals' }}
+                            · {{ formatMoney(pipelineTotal) }} total
+                        </p>
+
+                        <template v-if="closedSplit">
+                            <div
+                                class="crm-ov-split"
+                                role="img"
+                                :aria-label="`Closed value: ${formatPercent(closedSplit.lost)} lost, ${formatPercent(closedSplit.won)} won`"
+                            >
+                                <div
+                                    class="crm-ov-split-part crm-ov-split-hatch"
+                                    :style="{ flexBasis: `${closedSplit.lost}%` }"
+                                >
+                                    <span>{{ formatPercent(closedSplit.lost) }}</span>
+                                </div>
+                                <div
+                                    class="crm-ov-split-part crm-ov-split-solid"
+                                    :style="{ flexBasis: `${closedSplit.won}%` }"
+                                >
+                                    {{ formatPercent(closedSplit.won) }}
+                                </div>
+                            </div>
+                            <div class="crm-ov-split-legend" aria-hidden="true">
+                                <span class="crm-ov-legend-item">
+                                    <span class="crm-ov-ring" /> Lost
+                                </span>
+                                <span class="crm-ov-legend-item">
+                                    <span class="crm-ov-dot bg-surface" /> Won
+                                </span>
+                            </div>
+                        </template>
+                        <p v-else class="crm-ov-stat-sub mt-4">No closed deals yet this year.</p>
+                    </section>
+
+                    <!-- Revenue by source: blue gradient card with mini bars -->
+                    <section class="crm-ov-stat crm-ov-stat-blue">
+                        <div class="crm-ov-stat-head">
+                            <h2>Revenue by source</h2>
+                            <Icon icon="lucide:grip" class="crm-ov-grip" aria-hidden="true" />
+                        </div>
+                        <p class="crm-ov-stat-value">{{ formatMoney(revenueBySourceTotal) }}</p>
+                        <p class="crm-ov-stat-sub">
+                            {{ revenueBySource.length }}
+                            {{ revenueBySource.length === 1 ? 'lead source' : 'lead sources' }}
+                            · {{ year }}
+                        </p>
+
+                        <p v-if="revenueIsEmpty" class="crm-ov-stat-sub mt-4">
+                            No revenue by lead source for {{ year }}.
+                        </p>
                         <div
-                            class="flex items-start justify-between gap-2 pb-1"
+                            v-else
+                            class="crm-ov-mini"
+                            role="img"
+                            :aria-label="`Revenue by source: ${sourceBars.map((b) => `${b.source} ${formatMoney(b.value)}`).join(', ')}`"
                         >
+                            <span
+                                v-if="sourceAverageBottom"
+                                class="crm-ov-mini-avg"
+                                :style="{ bottom: sourceAverageBottom }"
+                                aria-hidden="true"
+                            />
+                            <div
+                                v-for="bar in sourceBars"
+                                :key="bar.source"
+                                class="crm-ov-mini-col"
+                                :class="bar.top ? 'crm-ov-mini-col-top' : ''"
+                                :title="`${bar.source}: ${formatMoney(bar.value)} · ${formatPercent(bar.percent)}`"
+                            >
+                                <div
+                                    class="relative flex w-full flex-1 items-end"
+                                >
+                                    <div class="crm-ov-mini-bar relative" :style="{ height: bar.height }">
+                                        <span v-if="bar.top" class="crm-ov-mini-tip">
+                                            {{ abbreviateMoney(bar.value) }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <span class="crm-ov-mini-label">{{ bar.source }}</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Deals by stage: soft card with curve -->
+                    <section class="crm-ov-stat crm-ov-stat-soft">
+                        <div class="crm-ov-stat-head">
+                            <h2>Win rate</h2>
+                            <Icon icon="lucide:grip" class="crm-ov-grip" aria-hidden="true" />
+                        </div>
+                        <p class="crm-ov-stat-value">
+                            {{ winRateLabel }}
+                        </p>
+                        <p class="crm-ov-stat-sub">
+                            {{ wonCount }} won · {{ lostCount }} lost · {{ dealCountTotal }}
+                            {{ dealCountTotal === 1 ? 'deal' : 'deals' }} by stage
+                        </p>
+
+                        <div
+                            v-if="stageCurve"
+                            class="crm-ov-curve"
+                            role="img"
+                            :aria-label="`Deals per stage: ${stageBars.map((b) => `${b.stage} ${b.count}`).join(', ')}`"
+                        >
+                            <svg
+                                :viewBox="`0 0 ${CURVE_WIDTH} ${CURVE_HEIGHT}`"
+                                preserveAspectRatio="none"
+                                aria-hidden="true"
+                            >
+                                <path class="crm-ov-curve-area" :d="stageCurve.area" />
+                                <path class="crm-ov-curve-line" :d="stageCurve.line" />
+                            </svg>
+                            <div class="crm-ov-curve-labels" aria-hidden="true">
+                                <span v-for="bar in stageBars" :key="`c-${bar.stage}`">
+                                    {{ bar.label }}
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Assistant follow-ups -->
+                    <section class="crm-ov-card" aria-labelledby="ov-assistant-heading">
+                        <div class="crm-ov-head">
                             <div>
-                                <h2 id="home-assistant-heading" class="text-h2">
+                                <h2 id="ov-assistant-heading" class="crm-ov-title">
                                     Assistant
                                 </h2>
-                                <p class="mt-0.5 text-small text-text-muted">
-                                    Follow-ups to review
-                                </p>
+                                <p class="crm-ov-sub">Follow-ups to review</p>
                             </div>
-                            <span class="crm-home-menu" aria-hidden="true">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                    class="h-5 w-5"
-                                >
-                                    <circle cx="12" cy="5" r="1.5" />
-                                    <circle cx="12" cy="12" r="1.5" />
-                                    <circle cx="12" cy="19" r="1.5" />
-                                </svg>
-                            </span>
+                            <Icon
+                                icon="lucide:sparkles"
+                                class="crm-ov-grip text-secondary"
+                                aria-hidden="true"
+                            />
                         </div>
 
                         <p
                             v-if="recommendations.length === 0"
-                            class="mt-3 rounded-xl bg-bg px-3 py-2 text-small text-text-muted"
+                            class="crm-ov-empty"
                             role="status"
                         >
                             No recommendations right now.
                         </p>
 
-                        <ul v-else role="list">
+                        <ul v-else class="crm-ov-list" role="list">
                             <li
                                 v-for="recommendation in recommendations"
                                 :key="recommendation.key"
-                                class="crm-home-suggest"
+                                class="crm-ov-item items-start"
                             >
-                                <span class="crm-home-avatar" aria-hidden="true">
-                                    {{ suggestionInitial(recommendation.title) }}
+                                <span
+                                    class="crm-ov-avatar crm-ov-avatar-letter"
+                                    aria-hidden="true"
+                                >
+                                    {{ initial(recommendation.title) }}
                                 </span>
                                 <div class="min-w-0 flex-1">
                                     <Link
                                         :href="recommendation.url"
-                                        class="block truncate text-body font-semibold text-text hover:text-secondary"
+                                        class="crm-ov-item-title"
                                     >
                                         {{ recommendation.title }}
                                     </Link>
-                                    <p class="mt-0.5 truncate text-small text-text-muted">
+                                    <p class="crm-ov-item-meta whitespace-normal">
                                         {{ recommendation.message }}
                                     </p>
                                     <button
                                         type="button"
-                                        class="mt-1 text-small text-secondary underline"
+                                        class="crm-ov-link-btn mt-1"
                                         :aria-label="`Dismiss recommendation for ${recommendation.title}`"
-                                        @click="
-                                            dismissRecommendation(recommendation)
-                                        "
+                                        @click="dismissRecommendation(recommendation)"
                                     >
                                         Dismiss
                                     </button>
                                 </div>
-                                <div class="flex flex-col items-end gap-1">
-                                    <span class="crm-home-suggest-id">
-                                        {{ suggestionCode(recommendation) }}
-                                    </span>
-                                    <span class="text-small text-text-muted">
-                                        {{ suggestionKind(recommendation) }}
-                                    </span>
-                                </div>
+                                <span class="crm-ov-tag">{{ suggestionKind(recommendation) }}</span>
                             </li>
                         </ul>
                     </section>
-                </div>
+
+                    <Link
+                        v-if="$page.props.auth?.role_slug"
+                        :href="route('reports.index')"
+                        class="crm-ov-cta"
+                    >
+                        <Icon icon="lucide:file-text" class="text-lg" aria-hidden="true" />
+                        Open reports
+                    </Link>
+                </aside>
             </div>
         </div>
+        <Teleport to="body">
+            <div v-if="rowMenu" class="crm-row-menu-backdrop" @click="closeRowMenu" />
+            <div
+                v-if="rowMenu"
+                class="crm-row-menu"
+                role="menu"
+                :style="{ top: rowMenu.top + 'px', left: rowMenu.left + 'px' }"
+            >
+                <Link :href="rowMenu.deal.url" class="crm-row-menu-item" role="menuitem" @click="closeRowMenu">
+                    <Icon icon="lucide:file-text" />
+                    View deal
+                </Link>
+                <Link
+                    v-if="rowMenu.deal.account"
+                    :href="route('accounts.show', rowMenu.deal.account.id)"
+                    class="crm-row-menu-item"
+                    role="menuitem"
+                    @click="closeRowMenu"
+                >
+                    <Icon icon="lucide:building-2" />
+                    View account
+                </Link>
+            </div>
+        </Teleport>
     </AuthenticatedLayout>
 </template>

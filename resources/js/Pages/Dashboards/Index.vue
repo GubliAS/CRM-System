@@ -3,6 +3,7 @@ import PaginationBar from '@/Components/PaginationBar.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { display } from '@/display';
+import { Icon } from '@iconify/vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 
@@ -69,10 +70,15 @@ function cloneDashboard(dashboard) {
     <AuthenticatedLayout>
         <Head title="Dashboards" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 class="text-h1">Dashboards</h1>
+                    <h1 class="crm-card-title text-h1">
+                        <span class="crm-card-title-icon" aria-hidden="true">
+                            <Icon icon="solar:widget-4-bold-duotone" />
+                        </span>
+                        Dashboards
+                    </h1>
                     <p class="mt-1 text-small text-text-muted">
                         Showing {{ dashboards.from ?? 0 }}–{{ dashboards.to ?? 0 }} of
                         {{ dashboards.total }}
@@ -81,8 +87,9 @@ function cloneDashboard(dashboard) {
                 <Link
                     v-if="can.create"
                     :href="route('dashboards.create')"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary gap-2"
                 >
+                    <Icon icon="solar:add-circle-bold-duotone" class="text-lg" />
                     New dashboard
                 </Link>
             </div>
@@ -92,11 +99,11 @@ function cloneDashboard(dashboard) {
                     v-for="folder in folders"
                     :key="folder.key"
                     type="button"
-                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    class="crm-view-tab"
                     :class="
                         filters.folder === folder.key
-                            ? 'border-secondary bg-surface text-primary'
-                            : 'border-border bg-surface text-text'
+                            ? 'crm-view-tab-active'
+                            : 'crm-view-tab-idle'
                     "
                     @click="changeFolder(folder.key)"
                 >
@@ -104,7 +111,10 @@ function cloneDashboard(dashboard) {
                 </button>
             </div>
 
-            <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="applySearch">
+            <form
+                class="crm-card mt-4 flex flex-wrap items-end gap-3"
+                @submit.prevent="applySearch"
+            >
                 <div class="min-w-0 flex-1 sm:max-w-xs">
                     <label class="text-small text-text-muted" for="dashboard-search">Search</label>
                     <TextInput
@@ -128,81 +138,102 @@ function cloneDashboard(dashboard) {
                         <option :value="100">100</option>
                     </select>
                 </div>
-                <button
-                    type="submit"
-                    class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 text-small text-text"
-                >
+                <button type="submit" class="crm-btn-secondary gap-2">
+                    <Icon icon="solar:magnifer-bold-duotone" class="text-base" />
                     Search
                 </button>
             </form>
 
-            <div class="mt-6 overflow-x-auto border border-border bg-surface">
-                <table class="min-w-full text-left text-body">
-                    <thead class="border-b border-border text-small text-text-muted">
-                        <tr>
-                            <th class="px-3 py-2 font-medium">Name</th>
-                            <th class="px-3 py-2 font-medium">Widgets</th>
-                            <th class="px-3 py-2 font-medium">Created by</th>
-                            <th class="px-3 py-2 font-medium">Created on</th>
-                            <th class="px-3 py-2 font-medium">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-if="dashboards.data.length === 0">
-                            <td colspan="5" class="px-3 py-6 text-text-muted">No dashboards found.</td>
-                        </tr>
-                        <tr
-                            v-for="dashboard in dashboards.data"
-                            :key="dashboard.id"
-                            class="border-b border-border"
+            <div v-if="dashboards.data.length === 0" class="crm-card mt-6">
+                <div class="crm-empty text-text-muted">
+                    <Icon
+                        icon="solar:widget-4-bold-duotone"
+                        class="mb-2 text-3xl text-secondary"
+                    />
+                    <p>No dashboards found.</p>
+                </div>
+            </div>
+
+            <div v-else class="crm-dash-list-grid mt-6">
+                <article
+                    v-for="dashboard in dashboards.data"
+                    :key="dashboard.id"
+                    class="crm-dash-card flex flex-col"
+                >
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <Link
+                                :href="route('dashboards.show', dashboard.id)"
+                                class="block truncate text-h3 text-primary hover:text-secondary"
+                            >
+                                {{ dashboard.name }}
+                            </Link>
+                            <p
+                                v-if="dashboard.description"
+                                class="mt-1 line-clamp-2 text-small text-text-muted"
+                            >
+                                {{ display(dashboard.description) }}
+                            </p>
+                        </div>
+                        <span
+                            class="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary-soft px-2 py-1 text-small font-semibold text-primary"
                         >
-                            <td class="px-3 py-3">
-                                <Link
-                                    :href="route('dashboards.show', dashboard.id)"
-                                    class="font-medium text-secondary underline"
-                                >
-                                    {{ dashboard.name }}
-                                </Link>
-                                <p
-                                    v-if="dashboard.description"
-                                    class="mt-1 text-small text-text-muted"
-                                >
-                                    {{ display(dashboard.description) }}
-                                </p>
-                            </td>
-                            <td class="px-3 py-3">{{ dashboard.widget_count }}</td>
-                            <td class="px-3 py-3">{{ display(dashboard.created_by?.name) }}</td>
-                            <td class="px-3 py-3">{{ display(dashboard.created_on) }}</td>
-                            <td class="px-3 py-3">
-                                <div class="flex flex-wrap gap-2">
-                                    <Link
-                                        v-if="dashboard.can.update"
-                                        :href="route('dashboards.edit', dashboard.id)"
-                                        class="text-small text-secondary underline"
-                                    >
-                                        Edit
-                                    </Link>
-                                    <button
-                                        v-if="dashboard.can.clone"
-                                        type="button"
-                                        class="text-small text-secondary underline"
-                                        @click="cloneDashboard(dashboard)"
-                                    >
-                                        Clone
-                                    </button>
-                                    <button
-                                        v-if="dashboard.can.delete"
-                                        type="button"
-                                        class="text-small text-danger underline"
-                                        @click="destroyDashboard(dashboard)"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                            <Icon icon="solar:widget-2-bold-duotone" />
+                            {{ dashboard.widget_count }}
+                        </span>
+                    </div>
+
+                    <dl class="mt-4 grid grid-cols-2 gap-2 text-small text-text-muted">
+                        <div>
+                            <dt>Created by</dt>
+                            <dd class="mt-0.5 font-medium text-text">
+                                {{ display(dashboard.created_by?.name) }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Created on</dt>
+                            <dd class="mt-0.5 font-medium text-text">
+                                {{ display(dashboard.created_on) }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <div class="mt-auto flex flex-wrap gap-3 border-t border-border pt-3">
+                        <Link
+                            :href="route('dashboards.show', dashboard.id)"
+                            class="inline-flex items-center gap-1 text-small text-secondary underline"
+                        >
+                            <Icon icon="solar:eye-bold-duotone" />
+                            Open
+                        </Link>
+                        <Link
+                            v-if="dashboard.can.update"
+                            :href="route('dashboards.edit', dashboard.id)"
+                            class="inline-flex items-center gap-1 text-small text-secondary underline"
+                        >
+                            <Icon icon="solar:pen-bold-duotone" />
+                            Edit
+                        </Link>
+                        <button
+                            v-if="dashboard.can.clone"
+                            type="button"
+                            class="inline-flex items-center gap-1 text-small text-secondary underline"
+                            @click="cloneDashboard(dashboard)"
+                        >
+                            <Icon icon="solar:copy-bold-duotone" />
+                            Clone
+                        </button>
+                        <button
+                            v-if="dashboard.can.delete"
+                            type="button"
+                            class="inline-flex items-center gap-1 text-small text-danger underline"
+                            @click="destroyDashboard(dashboard)"
+                        >
+                            <Icon icon="solar:trash-bin-trash-bold-duotone" />
+                            Delete
+                        </button>
+                    </div>
+                </article>
             </div>
 
             <PaginationBar :paginator="dashboards" class="mt-4" />

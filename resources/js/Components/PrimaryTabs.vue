@@ -1,17 +1,7 @@
 <script setup>
+import { Icon } from '@iconify/vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
-
-const props = defineProps({
-    stacked: {
-        type: Boolean,
-        default: false,
-    },
-    tone: {
-        type: String,
-        default: 'default',
-    },
-});
 
 const emit = defineEmits(['navigate']);
 
@@ -20,36 +10,68 @@ const abilities = computed(() => page.props.auth?.abilities ?? {});
 const roleSlug = computed(() => page.props.auth?.role_slug ?? null);
 
 const allTabs = [
-    { label: 'Home', routeName: 'home' },
-    { label: 'Leads', routeName: 'leads.index', active: 'leads.*', ability: 'leads' },
+    { label: 'Home', routeName: 'home', icon: 'lucide:house' },
+    {
+        label: 'Leads',
+        routeName: 'leads.index',
+        active: 'leads.*',
+        ability: 'leads',
+        icon: 'lucide:user-plus',
+    },
     {
         label: 'Accounts',
         routeName: 'accounts.index',
         active: 'accounts.*',
         ability: 'accounts',
+        icon: 'lucide:building-2',
     },
     {
         label: 'Contacts',
         routeName: 'contacts.index',
         active: 'contacts.*',
         ability: 'contacts',
+        icon: 'lucide:users',
     },
     {
         label: 'Opportunities',
         routeName: 'opportunities.index',
         active: 'opportunities.*',
         ability: 'opportunities',
+        icon: 'lucide:chart-column',
     },
-    { label: 'Cases', routeName: 'cases.index', active: 'cases.*', ability: 'cases' },
-    { label: 'Tasks', routeName: 'tasks.index', active: 'tasks.*', ability: 'tasks' },
+    {
+        label: 'Cases',
+        routeName: 'cases.index',
+        active: 'cases.*',
+        ability: 'cases',
+        icon: 'lucide:shield-alert',
+    },
+    {
+        label: 'Tasks',
+        routeName: 'tasks.index',
+        active: 'tasks.*',
+        ability: 'tasks',
+        icon: 'lucide:list-checks',
+    },
     {
         label: 'Calendar',
         routeName: 'events.index',
         active: 'events.*',
         ability: 'events',
+        icon: 'lucide:calendar',
     },
-    { label: 'Reports', routeName: 'reports.index', active: 'reports.*' },
-    { label: 'Dashboards', routeName: 'dashboards.index', active: 'dashboards.*' },
+    {
+        label: 'Reports',
+        routeName: 'reports.index',
+        active: 'reports.*',
+        icon: 'lucide:file-text',
+    },
+    {
+        label: 'Dashboards',
+        routeName: 'dashboards.index',
+        active: 'dashboards.*',
+        icon: 'lucide:layout-panel-left',
+    },
 ];
 
 const tabs = computed(() =>
@@ -62,11 +84,6 @@ const tabs = computed(() =>
             return false;
         }
 
-        if (tab.placeholder) {
-            return true;
-        }
-
-        // Tabs without an ability (e.g. Reports/Dashboards) stay visible once a role exists.
         return tab.ability ? abilities.value[tab.ability] === true : true;
     }),
 );
@@ -78,75 +95,24 @@ function tabIsCurrent(tab) {
 
     return tab.routeName ? route().current(tab.routeName) : false;
 }
-
-function linkClass(tab) {
-    const current = tabIsCurrent(tab);
-    const onPrimary = props.tone === 'on-primary';
-    const sidebar = props.tone === 'sidebar';
-
-    if (sidebar || props.stacked) {
-        if (sidebar) {
-            return current
-                ? 'rounded-md bg-primary font-semibold text-on-primary shadow-panel'
-                : 'rounded-md text-text-muted hover:bg-bg hover:text-text';
-        }
-
-        if (onPrimary) {
-            return current
-                ? 'border-l-4 border-on-primary bg-primary-hover text-on-primary'
-                : 'crm-chrome-muted border-l-4 border-transparent hover:bg-primary-hover';
-        }
-
-        return current
-            ? 'border-l-4 border-secondary text-primary'
-            : 'border-l-4 border-transparent text-text hover:bg-bg';
-    }
-
-    if (onPrimary) {
-        return current
-            ? 'border-b-2 border-on-primary font-semibold text-on-primary'
-            : 'crm-chrome-muted border-b-2 border-transparent';
-    }
-
-    return current
-        ? 'border-b-2 border-secondary text-primary'
-        : 'border-b-2 border-transparent text-text hover:text-primary';
-}
 </script>
 
 <template>
-    <div
-        :class="
-            stacked || tone === 'sidebar'
-                ? 'flex flex-col gap-1'
-                : 'flex flex-nowrap'
-        "
-    >
-        <template v-for="tab in tabs" :key="tab.label">
-            <Link
-                v-if="tab.routeName"
-                :href="route(tab.routeName)"
-                class="inline-flex min-h-11 shrink-0 items-center whitespace-nowrap px-3 text-body transition-colors duration-fast"
-                :class="linkClass(tab)"
-                @click="emit('navigate')"
-            >
-                {{ tab.label }}
-            </Link>
-            <span
-                v-else
-                class="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center whitespace-nowrap px-3 text-body"
-                :class="
-                    tone === 'on-primary'
-                        ? 'crm-chrome-muted border-b-2 border-transparent'
-                        : tone === 'sidebar'
-                          ? 'rounded-md text-text-muted'
-                          : 'border-b-2 border-transparent text-text-muted'
-                "
-                aria-disabled="true"
-                title="Coming in a later stage"
-            >
-                {{ tab.label }}
+    <div class="crm-rail-nav" role="navigation" aria-label="Modules">
+        <Link
+            v-for="tab in tabs"
+            :key="tab.label"
+            :href="route(tab.routeName)"
+            class="crm-rail-link"
+            :class="tabIsCurrent(tab) ? 'crm-rail-link-active' : ''"
+            :title="tab.label"
+            :aria-current="tabIsCurrent(tab) ? 'page' : undefined"
+            @click="emit('navigate')"
+        >
+            <span class="crm-rail-icon" aria-hidden="true">
+                <Icon :icon="tab.icon" />
             </span>
-        </template>
+            <span class="crm-rail-label">{{ tab.label }}</span>
+        </Link>
     </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { display } from '@/display';
+import { Icon } from '@iconify/vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -39,6 +40,13 @@ const maxChartValue = computed(() => {
 
     return max;
 });
+
+const widgetTypeIcon = {
+    metric: 'solar:hashtag-bold-duotone',
+    gauge: 'solar:compass-bold-duotone',
+    chart: 'solar:chart-bold-duotone',
+    table: 'solar:table-bold-duotone',
+};
 
 function applyFilters() {
     router.get(
@@ -80,16 +88,21 @@ function gaugePercent(value) {
 
     return `${pct}%`;
 }
+
+function typeIcon(type) {
+    return widgetTypeIcon[type] ?? 'solar:widget-2-bold-duotone';
+}
 </script>
 
 <template>
     <AuthenticatedLayout>
         <Head :title="dashboard.name" />
 
-        <div class="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        <div class="crm-page space-y-6">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <p class="text-small text-text-muted">
+                    <p class="inline-flex items-center gap-1 text-small text-text-muted">
+                        <Icon icon="solar:widget-4-bold-duotone" />
                         <Link :href="route('dashboards.index')" class="text-secondary underline">
                             Dashboards
                         </Link>
@@ -100,41 +113,41 @@ function gaugePercent(value) {
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-3 text-small"
-                        @click="refresh"
-                    >
+                    <button type="button" class="crm-btn-secondary gap-2" @click="refresh">
+                        <Icon icon="solar:refresh-bold-duotone" class="text-base" />
                         Refresh
                     </button>
                     <Link
                         v-if="can.update"
                         :href="route('dashboards.edit', dashboard.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-3 text-small"
+                        class="crm-btn-secondary gap-2"
                     >
+                        <Icon icon="solar:pen-bold-duotone" class="text-base" />
                         Edit
                     </Link>
                     <button
                         v-if="can.clone"
                         type="button"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-3 text-small"
+                        class="crm-btn-secondary gap-2"
                         @click="cloneDashboard"
                     >
+                        <Icon icon="solar:copy-bold-duotone" class="text-base" />
                         Clone
                     </button>
                     <button
                         v-if="can.delete"
                         type="button"
-                        class="inline-flex min-h-11 items-center rounded-md border border-danger bg-surface px-3 text-small text-danger"
+                        class="crm-btn-secondary gap-2 text-danger"
                         @click="destroyDashboard"
                     >
+                        <Icon icon="solar:trash-bin-trash-bold-duotone" class="text-base" />
                         Delete
                     </button>
                 </div>
             </div>
 
             <form
-                class="flex flex-wrap items-end gap-3 border border-border bg-surface p-4"
+                class="crm-card flex flex-wrap items-end gap-3"
                 @submit.prevent="applyFilters"
             >
                 <div>
@@ -168,41 +181,55 @@ function gaugePercent(value) {
                         </option>
                     </select>
                 </div>
-                <button
-                    type="submit"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-small font-semibold uppercase tracking-widest text-surface"
-                >
+                <button type="submit" class="crm-btn-primary gap-2">
+                    <Icon icon="solar:filter-bold-duotone" class="text-base" />
                     Apply filters
                 </button>
             </form>
 
-            <div v-if="widgets.length === 0" class="border border-border bg-surface p-6 text-text-muted">
-                This dashboard has no widgets yet.
-                <Link
-                    v-if="can.update"
-                    :href="route('dashboards.edit', dashboard.id)"
-                    class="text-secondary underline"
-                >
-                    Add widgets
-                </Link>
+            <div v-if="widgets.length === 0" class="crm-card text-text-muted">
+                <div class="crm-empty">
+                    <Icon
+                        icon="solar:widget-add-bold-duotone"
+                        class="mb-2 text-3xl text-secondary"
+                    />
+                    <p>
+                        This dashboard has no widgets yet.
+                        <Link
+                            v-if="can.update"
+                            :href="route('dashboards.edit', dashboard.id)"
+                            class="text-secondary underline"
+                        >
+                            Add widgets
+                        </Link>
+                    </p>
+                </div>
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-2">
+            <div v-else class="crm-dash-grid">
                 <section
                     v-for="widget in widgets"
                     :key="widget.id"
-                    class="border border-border bg-surface p-4"
+                    class="crm-dash-card"
                 >
                     <div class="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                            <h2 class="text-h2">{{ widget.title }}</h2>
-                            <p class="text-small text-text-muted">{{ widget.type }}</p>
+                            <h2 class="crm-card-title text-h2">
+                                <span class="crm-card-title-icon" aria-hidden="true">
+                                    <Icon :icon="typeIcon(widget.type)" />
+                                </span>
+                                {{ widget.title }}
+                            </h2>
+                            <p class="mt-1 text-small capitalize text-text-muted">
+                                {{ widget.type }}
+                            </p>
                         </div>
                         <Link
                             v-if="widget.report_url"
                             :href="widget.report_url"
-                            class="text-small text-secondary underline"
+                            class="inline-flex items-center gap-1 text-small text-secondary underline"
                         >
+                            <Icon icon="solar:document-text-bold-duotone" />
                             Open report
                         </Link>
                     </div>
@@ -217,7 +244,7 @@ function gaugePercent(value) {
                     <div v-else-if="widget.type === 'gauge'" class="mt-6 space-y-2">
                         <div class="h-3 w-full overflow-hidden rounded-md bg-bg">
                             <div
-                                class="h-full bg-secondary"
+                                class="h-full rounded-md bg-secondary"
                                 :style="{ width: gaugePercent(widget.result?.value) }"
                             />
                         </div>
@@ -236,7 +263,10 @@ function gaugePercent(value) {
                                 <span>{{ point.value }}</span>
                             </div>
                             <div class="h-2 w-full overflow-hidden rounded-md bg-bg">
-                                <div class="h-full bg-secondary" :style="{ width: barWidth(point.value) }" />
+                                <div
+                                    class="h-full rounded-md bg-secondary"
+                                    :style="{ width: barWidth(point.value) }"
+                                />
                             </div>
                         </div>
                         <p
