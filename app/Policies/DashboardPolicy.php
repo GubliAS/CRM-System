@@ -23,7 +23,13 @@ class DashboardPolicy
 
     public function view(User $user, Dashboard $dashboard): bool
     {
-        return (int) $dashboard->owner_id === (int) $user->id;
+        if ((int) $dashboard->owner_id === (int) $user->id) {
+            return true;
+        }
+
+        // Shared dashboards are read-only for everyone who may list them; their
+        // widgets still run under the viewer's own report permissions.
+        return $dashboard->folder === Dashboard::FOLDER_SHARED && $this->viewAny($user);
     }
 
     public function create(User $user): bool

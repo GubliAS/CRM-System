@@ -15,6 +15,7 @@ class UpdateDashboard
         $dashboard->update([
             'name' => $attributes['name'],
             'description' => $attributes['description'] ?? null,
+            'folder' => $attributes['folder'] ?? $dashboard->folder,
             'widgets' => $attributes['widgets'] ?? [],
             'updated_by' => $actor->id,
         ]);

@@ -31,6 +31,7 @@ class StoreDashboardRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            'folder' => ['nullable', 'string', Rule::in(Dashboard::FOLDERS)],
             'widgets' => ['nullable', 'array', 'max:'.Dashboard::MAX_WIDGETS],
             'widgets.*.id' => ['required', 'string', 'max:64'],
             'widgets.*.report_id' => ['required', 'integer', Rule::exists('reports', 'id')],

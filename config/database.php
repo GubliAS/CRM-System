@@ -76,6 +76,9 @@ return [
 
                     return is_file($ca) ? (realpath($ca) ?: $ca) : $ca;
                 })(),
+                // Opt-in: reuse the connection between requests. Against a remote
+                // database (e.g. Aiven) a fresh TLS connect costs ~1.5s per request.
+                PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false) ? true : null,
             ]) : [],
         ],
 

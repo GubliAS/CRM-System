@@ -15,8 +15,10 @@ use App\Models\User;
 use App\Support\DashboardRunner;
 use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 
@@ -39,7 +41,7 @@ class DashboardController extends Controller
 
         $dashboards = Dashboard::query()
             ->visibleTo($user)
-            ->with(['owner:id,name', 'createdBy:id,name']);
+            ->with('createdBy:id,name');
 
         $useRecent = $folder === 'recent' && $search === '';
         $recentIds = $useRecent ? RecentlyViewed::ids($user, Dashboard::class) : [];
@@ -72,6 +74,10 @@ class DashboardController extends Controller
                 'name' => $dashboard->name,
                 'description' => $dashboard->description,
                 'widget_count' => count($dashboard->widgets ?? []),
+                'folder' => $dashboard->folder,
+                'is_owner' => (int) $dashboard->owner_id === (int) $user->id,
+                'preview' => $this->layoutPreview($dashboard),
+                // `owner` is only loaded in the rare case the creator was deleted.
                 'created_by' => $dashboard->createdBy?->only(['id', 'name']) ?? $dashboard->owner?->only(['id', 'name']),
                 'created_on' => optional($dashboard->created_at)?->toDateString(),
                 'can' => [
@@ -133,6 +139,9 @@ class DashboardController extends Controller
                 'id' => $dashboard->id,
                 'name' => $dashboard->name,
                 'description' => $dashboard->description,
+                'folder' => $dashboard->folder,
+                'owner' => $dashboard->owner?->only(['id', 'name']),
+                'updated_on' => optional($dashboard->updated_at)?->toDateString(),
             ],
             'widgets' => $widgets,
             'filters' => $globalFilters,
@@ -145,6 +154,27 @@ class DashboardController extends Controller
         ]);
     }
 
+    /**
+     * Runs one not-yet-saved widget so the builder can show it exactly as the
+     * finished dashboard will. Reports the user cannot view come back as an
+     * "unavailable" widget, never as data.
+     */
+    public function previewWidget(Request $request): JsonResponse
+    {
+        $this->authorize('create', Dashboard::class);
+
+        $data = $request->validate([
+            'report_id' => ['required', 'integer'],
+            'type' => ['required', 'string', Rule::in(Dashboard::WIDGET_TYPES)],
+        ]);
+
+        return response()->json($this->runner->runWidget([
+            'id' => 'preview',
+            'report_id' => $data['report_id'],
+            'type' => $data['type'],
+        ], $request->user()));
+    }
+
     public function edit(Request $request, Dashboard $dashboard): InertiaResponse
     {
         $this->authorize('update', $dashboard);
@@ -154,6 +184,7 @@ class DashboardController extends Controller
                 'id' => $dashboard->id,
                 'name' => $dashboard->name,
                 'description' => $dashboard->description,
+                'folder' => $dashboard->folder,
                 'widgets' => $dashboard->widgets ?? [],
             ],
             'builder' => $this->builderPayload($request->user()),
@@ -193,6 +224,25 @@ class DashboardController extends Controller
         return redirect()
             ->route('dashboards.edit', $copy)
             ->with('success', 'Dashboard cloned.');
+    }
+
+    /**
+     * The stored layout, trimmed to what a thumbnail needs (no report is run).
+     *
+     * @return list<array{type: string, row: int, col: int, width: int, height: int}>
+     */
+    private function layoutPreview(Dashboard $dashboard): array
+    {
+        return collect($dashboard->widgets ?? [])
+            ->map(fn (array $widget): array => [
+                'type' => (string) ($widget['type'] ?? 'table'),
+                'row' => (int) ($widget['row'] ?? 0),
+                'col' => (int) ($widget['col'] ?? 0),
+                'width' => (int) ($widget['width'] ?? 6),
+                'height' => (int) ($widget['height'] ?? 3),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
