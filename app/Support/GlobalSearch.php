@@ -301,7 +301,7 @@ class GlobalSearch
                 'label' => 'Opportunity',
                 'title' => $record->name,
                 'subtitle' => $record->account?->name,
-                'url' => null,
+                'url' => route('opportunities.show', $record),
             ],
             'cases' => [
                 'id' => $record->id,

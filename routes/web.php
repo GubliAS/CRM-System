@@ -4,7 +4,9 @@ use App\Http\Controllers\AboutController;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CaseController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LeadController;
+use App\Http\Controllers\OpportunityController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -16,9 +18,7 @@ Route::get('/', function () {
 
 Route::get('/about', AboutController::class)->name('about');
 
-Route::get('/home', function () {
-    return Inertia::render('Home');
-})->middleware(['auth', 'verified'])->name('home');
+Route::get('/home', HomeController::class)->middleware(['auth', 'verified'])->name('home');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -27,6 +27,11 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/search', [SearchController::class, 'index'])->name('search.index');
     Route::get('/search/suggest', [SearchController::class, 'suggest'])->name('search.suggest');
+
+    Route::post('/home/recommendations/dismiss', [HomeController::class, 'dismiss'])
+        ->name('home.recommendations.dismiss');
+    Route::get('/opportunities', [OpportunityController::class, 'index'])->name('opportunities.index');
+    Route::get('/opportunities/{opportunity}', [OpportunityController::class, 'show'])->name('opportunities.show');
 
     Route::post('/leads/{lead}/status', [LeadController::class, 'changeStatus'])->name('leads.status');
     Route::post('/leads/{lead}/owner', [LeadController::class, 'changeOwner'])->name('leads.owner');

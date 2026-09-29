@@ -64,6 +64,11 @@ class Opportunity extends Model
         return $this->hasMany(Lead::class, 'converted_opportunity_id');
     }
 
+    public function stageHistories(): HasMany
+    {
+        return $this->hasMany(OpportunityStageHistory::class)->orderBy('id');
+    }
+
     public function relatedTasks(): MorphMany
     {
         return $this->morphMany(Task::class, 'related');
@@ -77,11 +82,6 @@ class Opportunity extends Model
     public function notes(): MorphMany
     {
         return $this->morphMany(Note::class, 'notable');
-    }
-
-    public function stageHistories(): HasMany
-    {
-        return $this->hasMany(OpportunityStageHistory::class)->orderBy('id');
     }
 
     public function recordStageHistory(?string $fromStage, User $actor): OpportunityStageHistory

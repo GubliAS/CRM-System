@@ -7,6 +7,7 @@ use App\Actions\Opportunities\ChangeOpportunityOwner;
 use App\Actions\Opportunities\CloneOpportunity;
 use App\Actions\Opportunities\CreateOpportunity;
 use App\Actions\Opportunities\UpdateOpportunity;
+use App\Actions\Search\RecordRecentlyViewed;
 use App\Http\Requests\ChangeOpportunityOwnerRequest;
 use App\Http\Requests\CloneOpportunityRequest;
 use App\Http\Requests\StoreOpportunityRequest;
@@ -16,6 +17,7 @@ use App\Models\Opportunity;
 use App\Models\User;
 use App\Support\OpportunityStage;
 use App\Support\Picklists;
+use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -33,8 +35,11 @@ class OpportunityController extends Controller
         $search = trim($request->string('search')->toString());
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
-        $perPage = $this->perPage($request);
         $showArchived = $request->boolean('show_archived');
+        $stage = $request->string('stage')->toString();
+        $year = $request->integer('year');
+        $view = $request->string('view')->toString();
+        $perPage = $this->perPage($request);
 
         $sortable = [
             'name' => 'name',
@@ -48,6 +53,25 @@ class OpportunityController extends Controller
             $sort = 'name';
         }
 
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
+
+        if ($year < 1970 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        if ($stage !== '' && ! array_key_exists($stage, OpportunityStage::PROBABILITIES)) {
+            $stage = '';
+        }
+
+        $useRecent = $view === 'recent'
+            && $search === ''
+            && $stage === ''
+            && ! $request->filled('year')
+            && ! $showArchived;
+        $recentIds = $useRecent ? RecentlyViewed::ids($user, Opportunity::class) : [];
+
         $opportunities = Opportunity::query()
             ->visibleTo($user)
             ->select([
@@ -58,6 +82,7 @@ class OpportunityController extends Controller
                 'close_date',
                 'stage',
                 'probability',
+                'lead_source',
                 'owner_id',
             ])
             ->with([
@@ -67,6 +92,18 @@ class OpportunityController extends Controller
 
         if (! $showArchived) {
             $opportunities->whereNull('archived_at');
+        }
+
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($opportunities, Opportunity::class, $recentIds);
+        }
+
+        if ($stage !== '') {
+            $opportunities->where('stage', $stage);
+        }
+
+        if ($request->filled('year')) {
+            $opportunities->whereYear('close_date', $year);
         }
 
         if ($search !== '') {
@@ -79,21 +116,30 @@ class OpportunityController extends Controller
             });
         }
 
-        if ($sort === 'account') {
-            $opportunities->orderBy(
-                Account::query()->select('name')->whereColumn('accounts.id', 'opportunities.account_id'),
-                $direction,
-            );
-        } elseif ($sort === 'owner') {
-            $opportunities->orderBy(
-                User::query()->select('name')->whereColumn('users.id', 'opportunities.owner_id'),
-                $direction,
-            );
-        } else {
-            $opportunities->orderBy($sortable[$sort], $direction);
+        if (! $useRecent) {
+            if ($sort === 'account') {
+                $opportunities->orderBy(
+                    Account::query()->select('name')->whereColumn('accounts.id', 'opportunities.account_id'),
+                    $direction,
+                );
+            } elseif ($sort === 'owner') {
+                $opportunities->orderBy(
+                    User::query()->select('name')->whereColumn('users.id', 'opportunities.owner_id'),
+                    $direction,
+                );
+            } elseif ($request->filled('sort') || $request->filled('direction')) {
+                $opportunities->orderBy($sortable[$sort], $direction);
+            } else {
+                $opportunities
+                    ->orderBy('close_date')
+                    ->orderBy('name')
+                    ->orderBy('id');
+            }
         }
 
-        $opportunities = $opportunities->orderBy('id')->paginate($perPage)->withQueryString();
+        $opportunities = $opportunities
+            ->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)
+            ->withQueryString();
 
         return Inertia::render('Opportunities/Index', [
             'opportunities' => $opportunities,
@@ -103,7 +149,11 @@ class OpportunityController extends Controller
                 'direction' => $direction,
                 'per_page' => $perPage,
                 'show_archived' => $showArchived,
+                'stage' => $stage,
+                'year' => $request->filled('year') ? $year : null,
+                'view' => $view,
             ],
+            'stages' => array_keys(OpportunityStage::PROBABILITIES),
             'can' => [
                 'create' => $user->can('create', Opportunity::class),
             ],
@@ -135,8 +185,11 @@ class OpportunityController extends Controller
         return $redirect->with('success', 'Opportunity saved.');
     }
 
-    public function show(Request $request, Opportunity $opportunity): Response
-    {
+    public function show(
+        Request $request,
+        Opportunity $opportunity,
+        RecordRecentlyViewed $recentlyViewed,
+    ): Response {
         $this->authorize('view', $opportunity);
 
         $user = $request->user();
@@ -148,6 +201,8 @@ class OpportunityController extends Controller
             'updatedBy:id,name',
             'stageHistories.user:id,name',
         ]);
+
+        $recentlyViewed->handle($user, $opportunity);
 
         return Inertia::render('Opportunities/Show', [
             'opportunity' => $opportunity,

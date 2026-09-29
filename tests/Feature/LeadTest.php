@@ -7,6 +7,7 @@ use App\Models\Contact;
 use App\Models\Event;
 use App\Models\Lead;
 use App\Models\Opportunity;
+use App\Models\OpportunityStageHistory;
 use App\Models\Role;
 use App\Models\Task;
 use App\Models\User;
@@ -74,6 +75,16 @@ test('conversion creates account contact and optional opportunity', function () 
         ->and($opportunity?->name)->toBe('Contoso Deal')
         ->and($opportunity?->account_id)->toBe($account->id)
         ->and($opportunity?->stage)->toBe('Qualification');
+
+    $history = OpportunityStageHistory::query()
+        ->where('opportunity_id', $opportunity->id)
+        ->get();
+
+    expect($history)->toHaveCount(1)
+        ->and($history->first()->from_stage)->toBeNull()
+        ->and($history->first()->to_stage)->toBe('Qualification')
+        ->and($history->first()->probability)->toBe(10)
+        ->and($history->first()->user_id)->toBe($rep->id);
 
     $task = Task::query()->where('subject', 'Open follow-up')->first();
 

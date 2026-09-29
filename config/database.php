@@ -3,11 +3,13 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
-if (PHP_VERSION_ID >= 80500) {
-    $mysqlSslCaOption = Mysql::ATTR_SSL_CA;
-} else {
-    $mysqlSslCaOption = PDO::MYSQL_ATTR_SSL_CA;
-}
+/*
+| PHP 8.5 deprecates PDO::MYSQL_ATTR_SSL_CA in favor of Pdo\Mysql::ATTR_SSL_CA.
+| Prefer the new constant when available so app config does not emit notices.
+*/
+$mysqlSslCaOption = class_exists(Mysql::class)
+    ? constant(Mysql::class.'::ATTR_SSL_CA')
+    : constant('PDO::MYSQL_ATTR_SSL_CA');
 
 return [
 

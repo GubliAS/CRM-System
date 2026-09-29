@@ -3,7 +3,7 @@ import Checkbox from '@/Components/Checkbox.vue';
 import PaginationBar from '@/Components/PaginationBar.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { display, formatDay, formatMoney } from '@/display';
+import { display, formatDay, formatMoney, personName } from '@/display';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 
@@ -14,6 +14,10 @@ const props = defineProps({
     },
     filters: {
         type: Object,
+        required: true,
+    },
+    stages: {
+        type: Array,
         required: true,
     },
     can: {
@@ -38,6 +42,11 @@ watch(
         showArchived.value = Boolean(value);
     },
 );
+
+const views = [
+    { key: 'recent', label: 'Recently Viewed' },
+    { key: 'all', label: 'All Opportunities' },
+];
 
 const columns = [
     { key: 'name', label: 'Name' },
@@ -68,12 +77,22 @@ function listQuery(extra = {}) {
         direction: props.filters.direction,
         per_page: props.filters.per_page,
         show_archived: showArchived.value ? 1 : undefined,
+        stage: props.filters.stage || undefined,
+        year: props.filters.year || undefined,
+        view: props.filters.view,
         ...extra,
     };
 }
 
 function applySearch() {
-    router.get(route('opportunities.index'), listQuery(), {
+    router.get(route('opportunities.index'), listQuery({ view: 'all' }), {
+        preserveState: true,
+        replace: true,
+    });
+}
+
+function changeView(view) {
+    router.get(route('opportunities.index'), listQuery({ view }), {
         preserveState: true,
         replace: true,
     });
@@ -87,7 +106,23 @@ function onArchived(value) {
 function sortHref(column) {
     const direction = props.filters.sort === column && props.filters.direction === 'asc' ? 'desc' : 'asc';
 
-    return route('opportunities.index', listQuery({ sort: column, direction }));
+    return route('opportunities.index', listQuery({ sort: column, direction, view: 'all' }));
+}
+
+function changeStage(event) {
+    const stage = event.target.value || undefined;
+
+    router.get(route('opportunities.index'), listQuery({ stage, view: 'all' }), {
+        preserveState: true,
+        replace: true,
+    });
+}
+
+function clearStage() {
+    router.get(route('opportunities.index'), listQuery({ stage: undefined }), {
+        preserveState: true,
+        replace: true,
+    });
 }
 
 function changePerPage(event) {
@@ -119,11 +154,49 @@ function changePerPage(event) {
                 </Link>
             </div>
 
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button
+                    v-for="view in views"
+                    :key="view.key"
+                    type="button"
+                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    :class="
+                        filters.view === view.key
+                            ? 'border-secondary bg-surface text-primary'
+                            : 'border-border bg-surface text-text'
+                    "
+                    @click="changeView(view.key)"
+                >
+                    {{ view.label }}
+                </button>
+            </div>
+
             <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="applySearch">
                 <div class="min-w-0 flex-1 sm:max-w-xs">
                     <label class="text-small text-text-muted" for="opportunity-search">Search</label>
                     <TextInput id="opportunity-search" v-model="search" type="search" class="mt-1 block w-full" />
                 </div>
+                <label class="text-small text-text-muted">
+                    Stage
+                    <select
+                        class="mt-1 block min-h-11 rounded-md border-border bg-surface text-body text-text"
+                        :value="filters.stage ?? ''"
+                        @change="changeStage"
+                    >
+                        <option value="">All stages</option>
+                        <option v-for="stageOption in stages" :key="stageOption" :value="stageOption">
+                            {{ stageOption }}
+                        </option>
+                    </select>
+                </label>
+                <button
+                    v-if="filters.stage"
+                    type="button"
+                    class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-3 text-small text-text"
+                    @click="clearStage"
+                >
+                    Clear stage
+                </button>
                 <div>
                     <label class="text-small text-text-muted" for="opportunity-per-page">Rows</label>
                     <select
@@ -150,12 +223,18 @@ function changePerPage(event) {
                 </button>
             </form>
 
+            <p v-if="filters.stage || filters.year" class="mt-3 text-small text-text-muted">
+                <span v-if="filters.stage">Filtered by stage: {{ filters.stage }}. </span>
+                <span v-if="filters.year">Close date year: {{ filters.year }}.</span>
+            </p>
+
             <div class="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
                 <table class="min-w-full text-left text-body">
-                    <thead class="bg-bg text-small text-text-muted">
+                    <thead class="border-b border-border bg-bg text-small text-text-muted">
                         <tr>
-                            <th v-for="column in columns" :key="column.key" scope="col" class="px-3 py-2">
+                            <th v-for="column in columns" :key="column.key" scope="col" class="px-3 py-3 font-medium">
                                 <Link
+                                    v-if="filters.view === 'all'"
                                     :href="sortHref(column.key)"
                                     class="inline-flex min-h-11 items-center gap-1 text-small text-text"
                                 >
@@ -164,21 +243,24 @@ function changePerPage(event) {
                                         {{ filters.direction === 'asc' ? '↑' : '↓' }}
                                     </span>
                                 </Link>
+                                <span v-else>{{ column.label }}</span>
                             </th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="divide-y divide-border">
                         <tr v-if="opportunities.data.length === 0">
-                            <td colspan="7" class="px-4 py-8 text-center text-body text-text-muted">
-                                {{ filters.search ? 'No opportunities match your search.' : 'No opportunities yet.' }}
+                            <td colspan="7" class="px-3 py-6 text-center text-text-muted">
+                                {{
+                                    filters.search || filters.stage || filters.year
+                                        ? 'No opportunities match this filter.'
+                                        : filters.view === 'recent'
+                                          ? 'No recently viewed opportunities yet.'
+                                          : 'No opportunities yet.'
+                                }}
                             </td>
                         </tr>
-                        <tr
-                            v-for="opportunity in opportunities.data"
-                            :key="opportunity.id"
-                            class="border-t border-border"
-                        >
-                            <td class="px-3 py-2">
+                        <tr v-for="opportunity in opportunities.data" :key="opportunity.id">
+                            <td class="px-3 py-3">
                                 <Link
                                     :href="route('opportunities.show', opportunity.id)"
                                     class="text-secondary underline"
@@ -186,7 +268,7 @@ function changePerPage(event) {
                                     {{ opportunity.name }}
                                 </Link>
                             </td>
-                            <td class="px-3 py-2">
+                            <td class="px-3 py-3">
                                 <Link
                                     v-if="opportunity.account"
                                     :href="route('accounts.show', opportunity.account.id)"
@@ -196,19 +278,17 @@ function changePerPage(event) {
                                 </Link>
                                 <span v-else>—</span>
                             </td>
-                            <td class="px-3 py-2">{{ formatMoney(opportunity.amount) }}</td>
-                            <td class="px-3 py-2">{{ formatDay(opportunity.close_date) }}</td>
-                            <td class="px-3 py-2" :class="stageClass(opportunity.stage)">{{ opportunity.stage }}</td>
-                            <td class="px-3 py-2">{{ opportunity.probability }}%</td>
-                            <td class="px-3 py-2">{{ display(opportunity.owner?.name) }}</td>
+                            <td class="px-3 py-3">{{ formatMoney(opportunity.amount) }}</td>
+                            <td class="px-3 py-3">{{ formatDay(opportunity.close_date) }}</td>
+                            <td class="px-3 py-3" :class="stageClass(opportunity.stage)">{{ opportunity.stage }}</td>
+                            <td class="px-3 py-3">{{ opportunity.probability }}%</td>
+                            <td class="px-3 py-3">{{ personName(opportunity.owner) }}</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
 
-            <div class="mt-4">
-                <PaginationBar :paginator="opportunities" />
-            </div>
+            <PaginationBar class="mt-4" :paginator="opportunities" />
         </div>
     </AuthenticatedLayout>
 </template>

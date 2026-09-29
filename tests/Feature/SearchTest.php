@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Lead;
+use App\Models\Opportunity;
 use App\Models\RecentlyViewedRecord;
 use App\Models\Role;
 use App\Models\SearchHistory;
@@ -124,5 +125,76 @@ test('opening a lead records recently viewed and defaults the list to those reco
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('leads.total', 2)
+        );
+});
+
+test('opportunity search hits include a usable show route', function () {
+    $rep = searchUser('sales-rep');
+
+    $opportunity = Opportunity::factory()->create([
+        'owner_id' => $rep->id,
+        'name' => 'Linkable Opportunity Deal',
+    ]);
+
+    $expectedUrl = route('opportunities.show', $opportunity);
+
+    $this->actingAs($rep)
+        ->getJson(route('search.suggest', ['q' => 'Linkable Opportunity']))
+        ->assertOk()
+        ->assertJsonPath('results.opportunities', function ($rows) use ($opportunity, $expectedUrl) {
+            $hit = collect($rows)->firstWhere('id', $opportunity->id);
+
+            return $hit !== null && ($hit['url'] ?? null) === $expectedUrl;
+        });
+
+    $this->actingAs($rep)
+        ->get(route('search.index', ['q' => 'Linkable Opportunity', 'type' => 'opportunities']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Search/Index')
+            ->where('results.total', 1)
+            ->where('results.data.0.id', $opportunity->id)
+            ->where('results.data.0.url', $expectedUrl)
+        );
+});
+
+test('opening an opportunity records recently viewed and defaults the list to those records', function () {
+    $rep = searchUser('sales-rep');
+
+    $viewed = Opportunity::factory()->create([
+        'owner_id' => $rep->id,
+        'name' => 'Viewed Opportunity',
+    ]);
+    $unviewed = Opportunity::factory()->create([
+        'owner_id' => $rep->id,
+        'name' => 'Unseen Opportunity',
+    ]);
+
+    $this->actingAs($rep)
+        ->get(route('opportunities.show', $viewed))
+        ->assertOk();
+
+    expect(RecentlyViewedRecord::query()
+        ->where('user_id', $rep->id)
+        ->where('viewable_type', Opportunity::class)
+        ->where('viewable_id', $viewed->id)
+        ->exists())->toBeTrue();
+
+    $this->actingAs($rep)
+        ->get(route('opportunities.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Opportunities/Index')
+            ->where('filters.view', 'recent')
+            ->where('opportunities.total', 1)
+            ->where('opportunities.data.0.id', $viewed->id)
+            ->where('opportunities.data', fn ($rows) => collect($rows)->pluck('id')->doesntContain($unviewed->id))
+        );
+
+    $this->actingAs($rep)
+        ->get(route('opportunities.index', ['view' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('opportunities.total', 2)
         );
 });

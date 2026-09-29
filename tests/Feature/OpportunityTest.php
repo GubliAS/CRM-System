@@ -181,7 +181,7 @@ test('archive sets archived_at and the default list hides the row', function () 
         );
 
     $this->actingAs($rep)
-        ->get(route('opportunities.index'))
+        ->get(route('opportunities.index', ['view' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Opportunities/Index')
@@ -190,7 +190,7 @@ test('archive sets archived_at and the default list hides the row', function () 
         );
 
     $this->actingAs($rep)
-        ->get(route('opportunities.index', ['show_archived' => 1]))
+        ->get(route('opportunities.index', ['view' => 'all', 'show_archived' => 1]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('opportunities.total', 2)

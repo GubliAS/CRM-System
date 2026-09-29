@@ -7,8 +7,10 @@ use App\Models\Contact;
 use App\Models\Event;
 use App\Models\Lead;
 use App\Models\Opportunity;
+use App\Models\OpportunityStageHistory;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\OpportunityStage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use LogicException;
@@ -133,18 +135,30 @@ class ConvertLead
             ]);
         }
 
-        return Opportunity::query()->create([
+        $stage = (string) $attributes['opportunity_stage'];
+
+        $opportunity = Opportunity::query()->create([
             'name' => $name,
             'account_id' => $account->id,
             'amount' => $attributes['opportunity_amount'] ?? null,
             'close_date' => $attributes['opportunity_close_date'],
-            'stage' => $attributes['opportunity_stage'],
+            'stage' => $stage,
             'lead_source' => $lead->lead_source,
             'description' => $lead->description,
             'owner_id' => $lead->owner_id ?? $actor->id,
             'created_by' => $actor->id,
             'updated_by' => $actor->id,
         ]);
+
+        OpportunityStageHistory::query()->create([
+            'opportunity_id' => $opportunity->id,
+            'from_stage' => null,
+            'to_stage' => $opportunity->stage,
+            'probability' => OpportunityStage::probability($opportunity->stage),
+            'user_id' => $actor->id,
+        ]);
+
+        return $opportunity;
     }
 
     private function transferActivities(

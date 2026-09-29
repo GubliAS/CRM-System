@@ -124,7 +124,14 @@ function submitClone() {
 
         <div class="mx-auto max-w-7xl px-4 py-6">
             <div class="flex flex-wrap items-start justify-between gap-3">
-                <h1 class="break-words text-h1">{{ opportunity.name }}</h1>
+                <div>
+                    <p class="text-small text-text-muted">
+                        <Link :href="route('opportunities.index')" class="text-secondary underline">
+                            Opportunities
+                        </Link>
+                    </p>
+                    <h1 class="mt-1 break-words text-h1">{{ opportunity.name }}</h1>
+                </div>
                 <div class="flex flex-wrap gap-2">
                     <Link
                         v-if="can.update"
@@ -198,12 +205,21 @@ function submitClone() {
                         <DetailField label="Stage">
                             <span :class="stageClass(opportunity.stage)">{{ opportunity.stage }}</span>
                         </DetailField>
-                        <DetailField label="Type" :value="opportunity.type" />
-                        <DetailField label="Lead source" :value="opportunity.lead_source" />
-                        <DetailField label="Next step" :value="opportunity.next_step" />
-                        <DetailField label="Owner" :value="opportunity.owner?.name" />
-                        <DetailField label="Description" :value="opportunity.description" />
+                        <DetailField label="Type" :value="display(opportunity.type)" />
+                        <DetailField label="Lead source" :value="display(opportunity.lead_source)" />
+                        <DetailField label="Next step" :value="display(opportunity.next_step)" />
+                        <DetailField label="Owner" :value="personName(opportunity.owner)" />
                     </dl>
+                </section>
+
+                <section
+                    v-if="opportunity.description"
+                    class="rounded-md border border-border bg-surface p-4"
+                >
+                    <h2 class="text-h2">Description</h2>
+                    <p class="mt-3 whitespace-pre-wrap text-body">
+                        {{ opportunity.description }}
+                    </p>
                 </section>
 
                 <section class="rounded-md border border-border bg-surface p-4">
