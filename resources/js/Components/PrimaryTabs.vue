@@ -19,7 +19,6 @@ const tabs = [
     { label: 'Calendar', routeName: 'events.index', active: 'events.*' },
     { label: 'Reports' },
     { label: 'Dashboards' },
-    { label: 'About', routeName: 'about' },
 ];
 
 function tabIsCurrent(tab) {

@@ -39,12 +39,6 @@ const page = usePage();
                             Register
                         </Link>
                     </template>
-                    <Link
-                        :href="route('about')"
-                        class="inline-flex min-h-11 items-center px-3 text-secondary"
-                    >
-                        About
-                    </Link>
                 </nav>
             </div>
         </header>
@@ -53,8 +47,8 @@ const page = usePage();
             <h1 class="text-h1">CRM</h1>
             <p class="mt-4 text-body text-text-muted">
                 Web CRM for the sales pipeline and customer support. Sign in to
-                open the Stage 0 shell. Leads, accounts, contacts, opportunities,
-                and cases arrive in later stages.
+                open the CRM (accounts, contacts, leads, opportunities, cases,
+                tasks, calendar).
             </p>
         </main>
     </div>
