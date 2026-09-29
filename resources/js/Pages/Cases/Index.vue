@@ -163,7 +163,22 @@ function changePerPage(event) {
                     <tbody>
                         <tr v-if="cases.data.length === 0">
                             <td colspan="6" class="px-4 py-8 text-center text-body text-text-muted">
-                                {{ filters.search ? 'No cases match your search.' : 'No cases in this view.' }}
+                                <template v-if="filters.search">
+                                    No cases match your search.
+                                </template>
+                                <template v-else-if="filters.view === 'recent'">
+                                    <p>No recently viewed cases.</p>
+                                    <button
+                                        type="button"
+                                        class="crm-btn-secondary mt-3"
+                                        @click="changeView('all_open')"
+                                    >
+                                        View all open cases
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    No cases in this view.
+                                </template>
                             </td>
                         </tr>
                         <tr v-for="item in cases.data" :key="item.id" class="border-t border-border">

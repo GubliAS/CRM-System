@@ -85,6 +85,32 @@ test('search history is stored for the current user', function () {
     expect(SearchHistory::query()->where('user_id', $rep->id)->where('query', 'HistoryProbe')->exists())->toBeTrue();
 });
 
+test('lead list recent view is empty when the user has not viewed any leads', function () {
+    $admin = searchUser('admin');
+
+    Lead::factory()->create([
+        'owner_id' => $admin->id,
+        'last_name' => 'Unseen',
+        'company' => 'Empty Recent Co',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('leads.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Leads/Index')
+            ->where('filters.view', 'recent')
+            ->where('leads.total', 0)
+        );
+
+    $this->actingAs($admin)
+        ->get(route('leads.index', ['view' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('leads.total', 1)
+        );
+});
+
 test('opening a lead records recently viewed and defaults the list to those records', function () {
     $rep = searchUser('sales-rep');
 
