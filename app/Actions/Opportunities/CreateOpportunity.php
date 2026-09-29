@@ -3,7 +3,9 @@
 namespace App\Actions\Opportunities;
 
 use App\Models\Opportunity;
+use App\Models\OpportunityStageHistory;
 use App\Models\User;
+use App\Support\OpportunityStage;
 use Illuminate\Support\Facades\DB;
 
 class CreateOpportunity
@@ -14,12 +16,20 @@ class CreateOpportunity
     public function handle(User $actor, array $attributes): Opportunity
     {
         return DB::transaction(function () use ($actor, $attributes): Opportunity {
-            $opportunity = new Opportunity($this->fields($attributes));
-            $opportunity->owner_id = $actor->id;
-            $opportunity->created_by = $actor->id;
-            $opportunity->updated_by = $actor->id;
-            $opportunity->save();
-            $opportunity->recordStageHistory(null, $actor);
+            $opportunity = Opportunity::query()->create([
+                ...$this->fields($attributes),
+                'owner_id' => $actor->id,
+                'created_by' => $actor->id,
+                'updated_by' => $actor->id,
+            ]);
+
+            OpportunityStageHistory::query()->create([
+                'opportunity_id' => $opportunity->id,
+                'from_stage' => null,
+                'to_stage' => $opportunity->stage,
+                'probability' => OpportunityStage::probability($opportunity->stage),
+                'user_id' => $actor->id,
+            ]);
 
             return $opportunity;
         });

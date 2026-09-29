@@ -4,12 +4,12 @@ use Illuminate\Support\Str;
 use Pdo\Mysql;
 
 /*
-| PDO::MYSQL_ATTR_SSL_CA is deprecated on PHP 8.5+. Prefer Pdo\Mysql::ATTR_SSL_CA
-| when that class exists so Aiven SSL still receives the CA path without noise.
+| PHP 8.5 deprecates PDO::MYSQL_ATTR_SSL_CA in favor of Pdo\Mysql::ATTR_SSL_CA.
+| Prefer the new constant when available so app config does not emit notices.
 */
 $mysqlSslCaOption = class_exists(Mysql::class)
-    ? Mysql::ATTR_SSL_CA
-    : PDO::MYSQL_ATTR_SSL_CA;
+    ? constant(Mysql::class.'::ATTR_SSL_CA')
+    : constant('PDO::MYSQL_ATTR_SSL_CA');
 
 return [
 

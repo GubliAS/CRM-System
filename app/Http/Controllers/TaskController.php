@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Search\RecordRecentlyViewed;
+use App\Actions\Tasks\AssignTask;
 use App\Actions\Tasks\CompleteTask;
 use App\Actions\Tasks\CreateTask;
 use App\Actions\Tasks\DeleteTask;
 use App\Actions\Tasks\UpdateTask;
+use App\Http\Requests\AssignTaskRequest;
 use App\Http\Requests\CompleteTaskRequest;
 use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
@@ -171,6 +173,15 @@ class TaskController extends Controller
         return redirect()
             ->back()
             ->with('success', 'Task completed.');
+    }
+
+    public function assign(AssignTaskRequest $request, Task $task, AssignTask $assign): RedirectResponse
+    {
+        $assign->handle($request->user(), $task, $request->validated());
+
+        return redirect()
+            ->back()
+            ->with('success', 'Task assigned.');
     }
 
     private function loadTask(Task $task): void

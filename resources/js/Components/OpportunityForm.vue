@@ -25,9 +25,17 @@ const props = defineProps({
         type: Array,
         required: true,
     },
-    leadSources: {
+    sources: {
         type: Array,
         required: true,
+    },
+    owners: {
+        type: Array,
+        default: () => [],
+    },
+    canReassign: {
+        type: Boolean,
+        default: false,
     },
     cancelHref: {
         type: String,
@@ -45,31 +53,23 @@ const accountOptions = computed(() =>
 );
 
 const stageOptions = computed(() =>
-    props.stages.map((stage) => ({
-        value: stage.name,
-        label: stage.name,
-    })),
+    props.stages.map((stage) => ({ value: stage, label: stage })),
 );
 
 const typeOptions = computed(() =>
-    props.types.map((type) => ({
-        value: type,
-        label: type,
-    })),
+    props.types.map((type) => ({ value: type, label: type })),
 );
 
-const leadSourceOptions = computed(() =>
-    props.leadSources.map((source) => ({
-        value: source,
-        label: source,
-    })),
+const sourceOptions = computed(() =>
+    props.sources.map((source) => ({ value: source, label: source })),
 );
 
-const probabilityLabel = computed(() => {
-    const match = props.stages.find((stage) => stage.name === props.form.stage);
-
-    return match ? `${match.probability}%` : '—';
-});
+const ownerOptions = computed(() =>
+    props.owners.map((owner) => ({
+        value: String(owner.id),
+        label: owner.name,
+    })),
+);
 </script>
 
 <template>
@@ -86,55 +86,89 @@ const probabilityLabel = computed(() => {
                 v-model="form.account_id"
                 :options="accountOptions"
                 placeholder="Select an account"
-                required
             />
         </FormField>
 
         <FormField label="Close date" required :error="form.errors.close_date">
-            <TextInput id="close_date" v-model="form.close_date" type="date" class="block w-full" required />
+            <TextInput
+                id="close_date"
+                v-model="form.close_date"
+                type="date"
+                class="block w-full"
+                required
+            />
         </FormField>
 
         <FormField label="Stage" required :error="form.errors.stage">
-            <SelectInput id="stage" v-model="form.stage" :options="stageOptions" placeholder="Select a stage" required />
+            <SelectInput id="stage" v-model="form.stage" :options="stageOptions" />
         </FormField>
 
         <FormField label="Amount" :error="form.errors.amount">
-            <TextInput id="amount" v-model="form.amount" type="number" min="0.01" step="0.01" class="block w-full" />
-        </FormField>
-
-        <FormField label="Probability">
-            <p id="probability" class="rounded-md border border-border bg-bg px-3 py-2 text-body text-text">
-                {{ probabilityLabel }}
-            </p>
+            <TextInput
+                id="amount"
+                v-model="form.amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                class="block w-full"
+            />
         </FormField>
 
         <FormField label="Type" :error="form.errors.type">
-            <SelectInput id="type" v-model="form.type" :options="typeOptions" placeholder="Select a type" />
+            <SelectInput
+                id="type"
+                v-model="form.type"
+                :options="typeOptions"
+                placeholder="None"
+            />
         </FormField>
 
         <FormField label="Lead source" :error="form.errors.lead_source">
             <SelectInput
                 id="lead_source"
                 v-model="form.lead_source"
-                :options="leadSourceOptions"
-                placeholder="Select a lead source"
+                :options="sourceOptions"
+                placeholder="None"
             />
         </FormField>
 
-        <FormField label="Next step" span :error="form.errors.next_step">
+        <FormField label="Next step" :error="form.errors.next_step">
             <TextInput id="next_step" v-model="form.next_step" class="block w-full" maxlength="255" />
         </FormField>
 
-        <FormField label="Description" span :error="form.errors.description">
-            <TextArea id="description" v-model="form.description" rows="4" />
+        <FormField
+            v-if="canReassign"
+            label="Owner"
+            :error="form.errors.owner_id"
+        >
+            <SelectInput
+                id="owner_id"
+                v-model="form.owner_id"
+                :options="ownerOptions"
+                placeholder="Keep current owner"
+            />
         </FormField>
 
-        <div class="flex flex-wrap items-center gap-2 md:col-span-2">
-            <PrimaryButton class="min-h-11" :disabled="form.processing">Save</PrimaryButton>
-            <SecondaryButton type="button" class="min-h-11" :disabled="form.processing" @click="emit('submit', true)">
-                Save & New
+        <FormField label="Description" span :error="form.errors.description">
+            <TextArea id="description" v-model="form.description" class="block w-full" rows="4" />
+        </FormField>
+
+        <div class="flex flex-wrap gap-2 md:col-span-2">
+            <PrimaryButton type="submit" class="min-h-11" :disabled="form.processing">
+                Save
+            </PrimaryButton>
+            <SecondaryButton
+                type="button"
+                class="min-h-11"
+                :disabled="form.processing"
+                @click="emit('submit', true)"
+            >
+                Save &amp; New
             </SecondaryButton>
-            <Link :href="cancelHref" class="inline-flex min-h-11 items-center px-3 text-body text-secondary">
+            <Link
+                :href="cancelHref"
+                class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+            >
                 Cancel
             </Link>
         </div>

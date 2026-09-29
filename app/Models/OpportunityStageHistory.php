@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use Database\Factories\OpportunityStageHistoryFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OpportunityStageHistory extends Model
 {
+    /** @use HasFactory<OpportunityStageHistoryFactory> */
+    use HasFactory;
+
     /**
      * @var list<string>
      */
@@ -18,16 +23,6 @@ class OpportunityStageHistory extends Model
         'user_id',
     ];
 
-    public function opportunity(): BelongsTo
-    {
-        return $this->belongsTo(Opportunity::class);
-    }
-
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
-
     /**
      * @return array<string, string>
      */
@@ -36,5 +31,15 @@ class OpportunityStageHistory extends Model
         return [
             'probability' => 'integer',
         ];
+    }
+
+    public function opportunity(): BelongsTo
+    {
+        return $this->belongsTo(Opportunity::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

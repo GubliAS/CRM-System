@@ -2,8 +2,10 @@
 
 namespace App\Actions\Contacts;
 
+use App\Mail\OwnerChangedMail;
 use App\Models\Contact;
 use App\Models\User;
+use App\Support\OutboundMail;
 
 class UpdateContact
 {
@@ -12,6 +14,7 @@ class UpdateContact
      */
     public function handle(User $actor, Contact $contact, array $attributes): Contact
     {
+        $previousOwnerId = $contact->owner_id;
         $values = ['updated_by' => $actor->id];
 
         foreach ([
@@ -54,6 +57,20 @@ class UpdateContact
         }
 
         $contact->update($values);
+        $contact = $contact->fresh(['owner']);
+
+        $newOwnerId = (int) ($contact->owner_id ?? 0);
+        if ($newOwnerId > 0 && $newOwnerId !== (int) $previousOwnerId && $contact->owner) {
+            $label = trim(($contact->first_name ? $contact->first_name.' ' : '').$contact->last_name);
+            OutboundMail::queueAndLog(
+                $actor,
+                $contact->owner,
+                $contact,
+                'Owner change notification sent.',
+                OwnerChangedMail::class,
+                [$contact, $contact->owner, $actor, 'contact '.$label],
+            );
+        }
 
         return $contact;
     }

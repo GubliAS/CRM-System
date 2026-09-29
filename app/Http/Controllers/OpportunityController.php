@@ -7,6 +7,7 @@ use App\Actions\Opportunities\ChangeOpportunityOwner;
 use App\Actions\Opportunities\CloneOpportunity;
 use App\Actions\Opportunities\CreateOpportunity;
 use App\Actions\Opportunities\UpdateOpportunity;
+use App\Actions\Search\RecordRecentlyViewed;
 use App\Http\Requests\ChangeOpportunityOwnerRequest;
 use App\Http\Requests\CloneOpportunityRequest;
 use App\Http\Requests\StoreOpportunityRequest;
@@ -14,14 +15,16 @@ use App\Http\Requests\UpdateOpportunityRequest;
 use App\Models\Account;
 use App\Models\Opportunity;
 use App\Models\User;
+use App\Support\CsvExporter;
 use App\Support\OpportunityStage;
 use App\Support\Picklists;
-use Illuminate\Database\Eloquent\Builder;
+use App\Support\RecentlyViewed;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OpportunityController extends Controller
 {
@@ -30,26 +33,31 @@ class OpportunityController extends Controller
         $this->authorize('viewAny', Opportunity::class);
 
         $user = $request->user();
-        $search = trim($request->string('search')->toString());
-        $sort = $request->string('sort')->toString();
-        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
+        $stage = $request->string('stage')->toString();
+        $year = $request->integer('year');
+        $view = $request->string('view')->toString();
+        $archived = $request->boolean('archived');
         $perPage = $this->perPage($request);
-        $showArchived = $request->boolean('show_archived');
 
-        $sortable = [
-            'name' => 'name',
-            'amount' => 'amount',
-            'close_date' => 'close_date',
-            'stage' => 'stage',
-            'probability' => 'probability',
-        ];
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
 
-        if (! array_key_exists($sort, $sortable) && ! in_array($sort, ['account', 'owner'], true)) {
-            $sort = 'name';
+        if ($year < 1970 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        if ($stage !== '' && ! array_key_exists($stage, OpportunityStage::PROBABILITIES)) {
+            $stage = '';
         }
 
         $opportunities = Opportunity::query()
             ->visibleTo($user)
+            ->when(
+                $archived,
+                fn ($query) => $query->whereNotNull('archived_at'),
+                fn ($query) => $query->whereNull('archived_at'),
+            )
             ->select([
                 'id',
                 'name',
@@ -58,68 +66,132 @@ class OpportunityController extends Controller
                 'close_date',
                 'stage',
                 'probability',
+                'lead_source',
                 'owner_id',
+                'archived_at',
             ])
-            ->with([
-                'account:id,name',
-                'owner:id,name',
-            ]);
+            ->with(['account:id,name', 'owner:id,name']);
 
-        if (! $showArchived) {
-            $opportunities->whereNull('archived_at');
+        $useRecent = $view === 'recent' && $stage === '' && ! $request->filled('year') && ! $archived;
+        $recentIds = $useRecent ? RecentlyViewed::ids($user, Opportunity::class) : [];
+
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds($opportunities, Opportunity::class, $recentIds);
         }
 
-        if ($search !== '') {
-            $like = $this->like($search);
-            $opportunities->where(function (Builder $query) use ($like): void {
-                $query->where('name', 'like', $like)
-                    ->orWhereHas('account', function (Builder $account) use ($like): void {
-                        $account->where('name', 'like', $like);
-                    });
-            });
+        if ($stage !== '') {
+            $opportunities->where('stage', $stage);
         }
 
-        if ($sort === 'account') {
-            $opportunities->orderBy(
-                Account::query()->select('name')->whereColumn('accounts.id', 'opportunities.account_id'),
-                $direction,
-            );
-        } elseif ($sort === 'owner') {
-            $opportunities->orderBy(
-                User::query()->select('name')->whereColumn('users.id', 'opportunities.owner_id'),
-                $direction,
-            );
-        } else {
-            $opportunities->orderBy($sortable[$sort], $direction);
+        if ($request->filled('year')) {
+            $opportunities->whereYear('close_date', $year);
         }
 
-        $opportunities = $opportunities->orderBy('id')->paginate($perPage)->withQueryString();
+        if (! $useRecent) {
+            $opportunities
+                ->orderBy('close_date')
+                ->orderBy('name')
+                ->orderBy('id');
+        }
+
+        $opportunities = $opportunities
+            ->paginate($useRecent ? RecentlyViewed::LIST_LIMIT : $perPage)
+            ->withQueryString();
 
         return Inertia::render('Opportunities/Index', [
             'opportunities' => $opportunities,
             'filters' => [
-                'search' => $search,
-                'sort' => $sort,
-                'direction' => $direction,
+                'stage' => $stage,
+                'year' => $request->filled('year') ? $year : null,
+                'view' => $view,
+                'archived' => $archived,
                 'per_page' => $perPage,
-                'show_archived' => $showArchived,
             ],
+            'stages' => array_keys(OpportunityStage::PROBABILITIES),
             'can' => [
                 'create' => $user->can('create', Opportunity::class),
+                'export' => $user->can('viewAny', Opportunity::class),
             ],
         ]);
+    }
+
+    public function export(Request $request, CsvExporter $exporter): StreamedResponse
+    {
+        $this->authorize('viewAny', Opportunity::class);
+
+        $user = $request->user();
+        $stage = $request->string('stage')->toString();
+        $year = $request->integer('year');
+        $view = $request->string('view')->toString();
+        $archived = $request->boolean('archived');
+
+        if (! in_array($view, ['recent', 'all'], true)) {
+            $view = 'recent';
+        }
+
+        if ($year < 1970 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        if ($stage !== '' && ! array_key_exists($stage, OpportunityStage::PROBABILITIES)) {
+            $stage = '';
+        }
+
+        $opportunities = Opportunity::query()
+            ->visibleTo($user)
+            ->when(
+                $archived,
+                fn ($query) => $query->whereNotNull('archived_at'),
+                fn ($query) => $query->whereNull('archived_at'),
+            )
+            ->with(['account:id,name', 'owner:id,name']);
+
+        $useRecent = $view === 'recent' && $stage === '' && ! $request->filled('year') && ! $archived;
+        if ($useRecent) {
+            RecentlyViewed::constrainToIds(
+                $opportunities,
+                Opportunity::class,
+                RecentlyViewed::ids($user, Opportunity::class),
+            );
+        }
+
+        if ($stage !== '') {
+            $opportunities->where('stage', $stage);
+        }
+
+        if ($request->filled('year')) {
+            $opportunities->whereYear('close_date', $year);
+        }
+
+        $rows = $opportunities->orderBy('close_date')->orderBy('id')->limit(200)->get()
+            ->map(fn (Opportunity $opportunity): array => [
+                $opportunity->name,
+                $opportunity->account?->name,
+                $opportunity->amount,
+                optional($opportunity->close_date)?->toDateString(),
+                $opportunity->stage,
+                $opportunity->probability,
+                $opportunity->lead_source,
+                $opportunity->owner?->name,
+            ]);
+
+        return $exporter->download('opportunities.csv', [
+            'Name',
+            'Account',
+            'Amount',
+            'Close date',
+            'Stage',
+            'Probability',
+            'Lead source',
+            'Owner',
+        ], $rows);
     }
 
     public function create(Request $request): Response
     {
         $this->authorize('create', Opportunity::class);
 
-        return Inertia::render('Opportunities/Create', [
-            'accounts' => $this->accounts($request->user()),
-            'stages' => OpportunityStage::options(),
-            'types' => Picklists::OPPORTUNITY_TYPES,
-            'leadSources' => Picklists::LEAD_SOURCES,
-        ]);
+        return Inertia::render('Opportunities/Create', $this->formOptions($request->user()));
     }
 
     public function store(StoreOpportunityRequest $request, CreateOpportunity $create): RedirectResponse
@@ -135,8 +207,11 @@ class OpportunityController extends Controller
         return $redirect->with('success', 'Opportunity saved.');
     }
 
-    public function show(Request $request, Opportunity $opportunity): Response
-    {
+    public function show(
+        Request $request,
+        Opportunity $opportunity,
+        RecordRecentlyViewed $recentlyViewed,
+    ): Response {
         $this->authorize('view', $opportunity);
 
         $user = $request->user();
@@ -149,17 +224,17 @@ class OpportunityController extends Controller
             'stageHistories.user:id,name',
         ]);
 
+        $recentlyViewed->handle($user, $opportunity);
+
         return Inertia::render('Opportunities/Show', [
             'opportunity' => $opportunity,
-            'stagePath' => $this->stagePath($opportunity->stage),
-            'closeDateInPast' => $opportunity->close_date->toDateString() < now()->toDateString(),
-            'owners' => $user->can('update', $opportunity)
-                ? User::query()->orderBy('name')->get(['id', 'name'])
-                : [],
+            'stages' => array_keys(OpportunityStage::PROBABILITIES),
+            'owners' => $this->owners($user),
             'can' => [
                 'update' => $user->can('update', $opportunity),
                 'delete' => $user->can('delete', $opportunity),
-                'clone' => $user->can('create', Opportunity::class),
+                'changeOwner' => $user->can('changeOwner', $opportunity),
+                'clone' => $user->can('clone', $opportunity),
             ],
         ]);
     }
@@ -168,17 +243,21 @@ class OpportunityController extends Controller
     {
         $this->authorize('update', $opportunity);
 
+        $user = $request->user();
+
         return Inertia::render('Opportunities/Edit', [
-            'opportunity' => $opportunity,
-            'accounts' => $this->accounts($request->user()),
-            'stages' => OpportunityStage::options(),
-            'types' => Picklists::OPPORTUNITY_TYPES,
-            'leadSources' => Picklists::LEAD_SOURCES,
+            'opportunity' => $opportunity->load('account:id,name'),
+            ...$this->formOptions($user),
+            'owners' => $this->owners($user),
+            'canReassign' => $user->mayReassignOwner(),
         ]);
     }
 
-    public function update(UpdateOpportunityRequest $request, Opportunity $opportunity, UpdateOpportunity $update): RedirectResponse
-    {
+    public function update(
+        UpdateOpportunityRequest $request,
+        Opportunity $opportunity,
+        UpdateOpportunity $update,
+    ): RedirectResponse {
         $this->authorize('update', $opportunity);
 
         $update->handle($request->user(), $opportunity, $request->validated());
@@ -190,32 +269,24 @@ class OpportunityController extends Controller
         return $redirect->with('success', 'Opportunity saved.');
     }
 
-    public function destroy(Request $request, Opportunity $opportunity, ArchiveOpportunity $archive): RedirectResponse
-    {
+    public function destroy(
+        Request $request,
+        Opportunity $opportunity,
+        ArchiveOpportunity $archive,
+    ): RedirectResponse {
         $this->authorize('delete', $opportunity);
 
         $archive->handle($request->user(), $opportunity);
 
-        return redirect()
-            ->route('opportunities.show', $opportunity)
-            ->with('success', 'Opportunity archived.');
+        return redirect()->route('opportunities.index')->with('success', 'Opportunity archived.');
     }
 
-    public function changeOwner(ChangeOpportunityOwnerRequest $request, Opportunity $opportunity, ChangeOpportunityOwner $changeOwner): RedirectResponse
-    {
-        $this->authorize('update', $opportunity);
-
-        $changeOwner->handle($request->user(), $opportunity, (int) $request->validated('owner_id'));
-
-        return redirect()
-            ->route('opportunities.show', $opportunity)
-            ->with('success', 'Owner updated.');
-    }
-
-    public function storeClone(CloneOpportunityRequest $request, Opportunity $opportunity, CloneOpportunity $clone): RedirectResponse
-    {
-        $this->authorize('view', $opportunity);
-        $this->authorize('create', Opportunity::class);
+    public function clone(
+        CloneOpportunityRequest $request,
+        Opportunity $opportunity,
+        CloneOpportunity $clone,
+    ): RedirectResponse {
+        $this->authorize('clone', $opportunity);
 
         $copy = $clone->handle($request->user(), $opportunity, $request->validated());
 
@@ -224,62 +295,46 @@ class OpportunityController extends Controller
             ->with('success', 'Opportunity cloned.');
     }
 
-    /**
-     * @return Collection<int, Account>
-     */
-    private function accounts(User $user): Collection
-    {
-        return Account::query()
-            ->visibleTo($user)
-            ->orderBy('name')
-            ->get(['id', 'name']);
+    public function changeOwner(
+        ChangeOpportunityOwnerRequest $request,
+        Opportunity $opportunity,
+        ChangeOpportunityOwner $changeOwner,
+    ): RedirectResponse {
+        $this->authorize('changeOwner', $opportunity);
+
+        $changeOwner->handle($request->user(), $opportunity, $request->validated());
+
+        return redirect()
+            ->route('opportunities.show', $opportunity)
+            ->with('success', 'Opportunity owner updated.');
     }
 
     /**
-     * @return list<array{name: string, state: string, emphasis: string}>
+     * @return array<string, mixed>
      */
-    private function stagePath(string $stage): array
+    private function formOptions(User $user): array
     {
-        $terminal = $stage === OpportunityStage::CLOSED_LOST
-            ? OpportunityStage::CLOSED_LOST
-            : OpportunityStage::CLOSED_WON;
-
-        $names = [
-            OpportunityStage::QUALIFICATION,
-            OpportunityStage::MEETING_SCHEDULED,
-            OpportunityStage::PROPOSAL,
-            OpportunityStage::NEGOTIATION,
-            $terminal,
+        return [
+            'accounts' => Account::query()
+                ->visibleTo($user)
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'stages' => array_keys(OpportunityStage::PROBABILITIES),
+            'types' => Picklists::OPPORTUNITY_TYPES,
+            'sources' => Picklists::LEAD_SOURCES,
         ];
+    }
 
-        $currentIndex = array_search($stage, $names, true);
-
-        if ($currentIndex === false) {
-            $currentIndex = 0;
+    /**
+     * @return Collection<int, User>|list<never>
+     */
+    private function owners(User $user)
+    {
+        if (! $user->mayReassignOwner()) {
+            return [];
         }
 
-        $steps = [];
-
-        foreach ($names as $index => $name) {
-            if ($index < $currentIndex) {
-                $state = 'completed';
-                $emphasis = 'success';
-            } elseif ($index === $currentIndex) {
-                $state = 'current';
-                $emphasis = $name === OpportunityStage::CLOSED_LOST ? 'danger' : 'primary';
-            } else {
-                $state = 'future';
-                $emphasis = 'muted';
-            }
-
-            $steps[] = [
-                'name' => $name,
-                'state' => $state,
-                'emphasis' => $emphasis,
-            ];
-        }
-
-        return $steps;
+        return User::query()->orderBy('name')->get(['id', 'name']);
     }
 
     private function perPage(Request $request): int
@@ -297,10 +352,5 @@ class OpportunityController extends Controller
         }
 
         return min($perPage, 200);
-    }
-
-    private function like(string $search): string
-    {
-        return '%'.addcslashes($search, '%_\\').'%';
     }
 }

@@ -2,8 +2,10 @@
 
 namespace App\Actions\Accounts;
 
+use App\Mail\OwnerChangedMail;
 use App\Models\Account;
 use App\Models\User;
+use App\Support\OutboundMail;
 
 class UpdateAccount
 {
@@ -12,6 +14,7 @@ class UpdateAccount
      */
     public function handle(User $actor, Account $account, array $attributes): Account
     {
+        $previousOwnerId = $account->owner_id;
         $values = ['updated_by' => $actor->id];
 
         foreach ([
@@ -46,6 +49,19 @@ class UpdateAccount
         }
 
         $account->update($values);
+        $account = $account->fresh(['owner']);
+
+        $newOwnerId = (int) ($account->owner_id ?? 0);
+        if ($newOwnerId > 0 && $newOwnerId !== (int) $previousOwnerId && $account->owner) {
+            OutboundMail::queueAndLog(
+                $actor,
+                $account->owner,
+                $account,
+                'Owner change notification sent.',
+                OwnerChangedMail::class,
+                [$account, $account->owner, $actor, 'account '.$account->name],
+            );
+        }
 
         return $account;
     }

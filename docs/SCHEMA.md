@@ -137,7 +137,7 @@ Stage map lives in `app/Support/OpportunityStage.php`. The `Opportunity` saving 
 
 `expected_revenue` is not a column. The accessor returns `amount * probability / 100` as a two-decimal string, or null when `amount` is null. It is appended on the model.
 
-A row is written in `opportunity_stage_histories` when an opportunity is created (`from_stage` null) and whenever the stage changes. Other field updates do not add a row.
+A row is written in `opportunity_stage_histories` when an opportunity is created (`from_stage` null), when a lead conversion creates the opening opportunity, and whenever the stage changes. Other field updates do not add a row.
 
 ## opportunity_stage_histories
 
@@ -145,11 +145,26 @@ A row is written in `opportunity_stage_histories` when an opportunity is created
 | --- | --- | --- | --- |
 | id | BIGINT UNSIGNED | no | Primary key |
 | opportunity_id | BIGINT UNSIGNED | no | FK `opportunities.id`, `ON DELETE CASCADE`, indexed |
-| from_stage | VARCHAR(40) | yes | Null when the opportunity is created |
-| to_stage | VARCHAR(40) | no | |
-| probability | TINYINT UNSIGNED | no | Probability of `to_stage` |
+| from_stage | VARCHAR(40) | yes | Null for the opening row on insert or conversion |
+| to_stage | VARCHAR(40) | no | Stage after the change |
+| probability | TINYINT UNSIGNED | no | Probability for `to_stage` |
 | user_id | BIGINT UNSIGNED | yes | FK `users.id`, `ON DELETE SET NULL`, indexed |
 | created_at, updated_at | TIMESTAMP | yes | |
+
+## assistant_recommendation_dismissals
+
+Home assistant recommendations dismissed per user (Stage 9).
+
+| Column | MySQL type | Null | Notes |
+| --- | --- | --- | --- |
+| id | BIGINT UNSIGNED | no | Primary key |
+| user_id | BIGINT UNSIGNED | no | FK `users.id`, `ON DELETE CASCADE`, indexed |
+| rule | VARCHAR(40) | no | Assistant rule identifier |
+| recommendable_type | VARCHAR(255) | no | Morph type. Composite index with `recommendable_id` |
+| recommendable_id | BIGINT UNSIGNED | no | Morph id |
+| created_at, updated_at | TIMESTAMP | yes | |
+
+Unique on `user_id`, `rule`, `recommendable_type`, `recommendable_id`.
 
 ## cases
 

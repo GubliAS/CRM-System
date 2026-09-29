@@ -48,8 +48,8 @@ const allTabs = [
         active: 'events.*',
         ability: 'events',
     },
-    { label: 'Reports', placeholder: true },
-    { label: 'Dashboards', placeholder: true },
+    { label: 'Reports', routeName: 'reports.index', active: 'reports.*' },
+    { label: 'Dashboards', routeName: 'dashboards.index', active: 'dashboards.*' },
 ];
 
 const tabs = computed(() =>
@@ -66,7 +66,8 @@ const tabs = computed(() =>
             return true;
         }
 
-        return tab.ability ? abilities.value[tab.ability] === true : false;
+        // Tabs without an ability (e.g. Reports/Dashboards) stay visible once a role exists.
+        return tab.ability ? abilities.value[tab.ability] === true : true;
     }),
 );
 

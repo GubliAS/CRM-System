@@ -96,13 +96,22 @@ function changePerPage(event) {
                         Showing {{ accounts.from ?? 0 }}–{{ accounts.to ?? 0 }} of {{ accounts.total }}
                     </p>
                 </div>
-                <Link
-                    v-if="can.create"
-                    :href="route('accounts.create')"
-                    class="crm-btn-primary"
-                >
-                    New account
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                    <a
+                        v-if="can.export"
+                        :href="route('accounts.export', listQuery())"
+                        class="crm-btn-secondary"
+                    >
+                        Export CSV
+                    </a>
+                    <Link
+                        v-if="can.create"
+                        :href="route('accounts.create')"
+                        class="crm-btn-primary"
+                    >
+                        New account
+                    </Link>
+                </div>
             </div>
 
             <div class="mt-4 flex flex-wrap gap-2">

@@ -296,9 +296,13 @@ function submitConvert() {
                             <span v-else>—</span>
                         </DetailField>
                         <DetailField label="Opportunity">
-                            <span v-if="lead.converted_opportunity">
+                            <Link
+                                v-if="lead.converted_opportunity"
+                                :href="route('opportunities.show', lead.converted_opportunity.id)"
+                                class="text-secondary underline"
+                            >
                                 {{ lead.converted_opportunity.name }}
-                            </span>
+                            </Link>
                             <span v-else>—</span>
                         </DetailField>
                     </dl>

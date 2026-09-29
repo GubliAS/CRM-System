@@ -2,8 +2,10 @@
 
 namespace App\Actions\Cases;
 
+use App\Mail\OwnerChangedMail;
 use App\Models\SupportCase;
 use App\Models\User;
+use App\Support\OutboundMail;
 use LogicException;
 
 class UpdateCase
@@ -17,6 +19,7 @@ class UpdateCase
             throw new LogicException('Closed cases cannot be edited.');
         }
 
+        $previousOwnerId = $case->owner_id;
         $values = ['updated_by' => $actor->id];
 
         foreach ([
@@ -45,6 +48,19 @@ class UpdateCase
         }
 
         $case->update($values);
+        $case = $case->fresh(['owner']);
+
+        $newOwnerId = (int) ($case->owner_id ?? 0);
+        if ($newOwnerId > 0 && $newOwnerId !== (int) $previousOwnerId && $case->owner) {
+            OutboundMail::queueAndLog(
+                $actor,
+                $case->owner,
+                $case,
+                'Owner change notification sent.',
+                OwnerChangedMail::class,
+                [$case, $case->owner, $actor, 'case '.$case->case_number],
+            );
+        }
 
         return $case;
     }

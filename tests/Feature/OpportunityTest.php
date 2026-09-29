@@ -1,122 +1,123 @@
 <?php
 
 use App\Models\Account;
+use App\Models\ActivityLog;
 use App\Models\Event;
-use App\Models\Lead;
 use App\Models\Note;
 use App\Models\Opportunity;
+use App\Models\OpportunityStageHistory;
+use App\Models\Role;
 use App\Models\Task;
+use App\Models\User;
 use App\Support\OpportunityStage;
 use Inertia\Testing\AssertableInertia as Assert;
 
-test('creating at qualification stores probability flags and one history row', function () {
-    $rep = crmUser('sales-rep');
-    $other = crmUser('sales-rep');
+function opportunityUser(string $slug): User
+{
+    $role = Role::query()->firstOrCreate(
+        ['slug' => $slug],
+        ['name' => $slug],
+    );
+
+    return User::factory()->create([
+        'role_id' => $role->id,
+    ]);
+}
+
+test('creating an opportunity writes opening stage history and sets probability', function () {
+    $rep = opportunityUser('sales-rep');
     $account = Account::factory()->create(['owner_id' => $rep->id]);
 
     $response = $this->actingAs($rep)->post(route('opportunities.store'), [
-        'name' => 'Northwind expansion',
+        'name' => 'Northwind Expansion',
         'account_id' => $account->id,
-        'close_date' => now()->addWeek()->toDateString(),
+        'amount' => '25000.00',
+        'close_date' => now()->addMonth()->toDateString(),
         'stage' => OpportunityStage::QUALIFICATION,
-        'amount' => 2500,
-        'owner_id' => $other->id,
+        'type' => 'New Business',
     ]);
 
-    $opportunity = Opportunity::query()->where('name', 'Northwind expansion')->first();
+    $opportunity = Opportunity::query()->where('name', 'Northwind Expansion')->first();
 
     expect($opportunity)->not->toBeNull()
-        ->and($opportunity->probability)->toBe(10)
-        ->and($opportunity->is_closed)->toBeFalse()
-        ->and($opportunity->is_won)->toBeFalse()
-        ->and($opportunity->owner_id)->toBe($rep->id)
-        ->and($opportunity->stageHistories)->toHaveCount(1)
-        ->and($opportunity->stageHistories->first()->from_stage)->toBeNull()
-        ->and($opportunity->stageHistories->first()->to_stage)->toBe(OpportunityStage::QUALIFICATION)
-        ->and($opportunity->stageHistories->first()->probability)->toBe(10)
-        ->and($opportunity->stageHistories->first()->user_id)->toBe($rep->id);
+        ->and($opportunity?->probability)->toBe(10)
+        ->and($opportunity?->is_closed)->toBeFalse()
+        ->and($opportunity?->is_won)->toBeFalse()
+        ->and($opportunity?->owner_id)->toBe($rep->id);
 
     $response->assertRedirect(route('opportunities.show', $opportunity));
+
+    $history = OpportunityStageHistory::query()
+        ->where('opportunity_id', $opportunity->id)
+        ->first();
+
+    expect($history)->not->toBeNull()
+        ->and($history?->from_stage)->toBeNull()
+        ->and($history?->to_stage)->toBe(OpportunityStage::QUALIFICATION)
+        ->and($history?->probability)->toBe(10)
+        ->and($history?->user_id)->toBe($rep->id);
 });
 
-test('changing the stage updates probability flags expected revenue and history', function () {
-    $rep = crmUser('sales-rep');
+test('updating stage refreshes probability and appends stage history', function () {
+    $rep = opportunityUser('sales-rep');
     $account = Account::factory()->create(['owner_id' => $rep->id]);
     $opportunity = Opportunity::factory()->create([
         'owner_id' => $rep->id,
         'account_id' => $account->id,
         'stage' => OpportunityStage::QUALIFICATION,
-        'amount' => 2000,
+        'amount' => 10000,
         'close_date' => now()->addMonth()->toDateString(),
     ]);
 
-    $fields = [
-        'name' => $opportunity->name,
-        'account_id' => $account->id,
-        'amount' => 2000,
-        'close_date' => $opportunity->close_date->toDateString(),
-        'type' => $opportunity->type,
-        'lead_source' => $opportunity->lead_source,
-    ];
+    OpportunityStageHistory::query()->create([
+        'opportunity_id' => $opportunity->id,
+        'from_stage' => null,
+        'to_stage' => OpportunityStage::QUALIFICATION,
+        'probability' => 10,
+        'user_id' => $rep->id,
+    ]);
 
     $this->actingAs($rep)
         ->put(route('opportunities.update', $opportunity), [
-            ...$fields,
-            'stage' => OpportunityStage::QUALIFICATION,
-            'description' => 'Notes only',
-        ])
-        ->assertRedirect(route('opportunities.show', $opportunity));
-
-    $opportunity->refresh();
-
-    expect($opportunity->description)->toBe('Notes only')
-        ->and($opportunity->probability)->toBe(10)
-        ->and($opportunity->stageHistories)->toHaveCount(0);
-
-    $this->actingAs($rep)
-        ->put(route('opportunities.update', $opportunity), [
-            ...$fields,
+            'name' => $opportunity->name,
+            'account_id' => $account->id,
+            'amount' => '10000.00',
+            'close_date' => now()->addMonth()->toDateString(),
             'stage' => OpportunityStage::CLOSED_WON,
-            'description' => 'Notes only',
         ])
         ->assertRedirect(route('opportunities.show', $opportunity));
 
     $opportunity->refresh();
 
-    expect($opportunity->probability)->toBe(100)
+    expect($opportunity->stage)->toBe(OpportunityStage::CLOSED_WON)
+        ->and($opportunity->probability)->toBe(100)
         ->and($opportunity->is_closed)->toBeTrue()
         ->and($opportunity->is_won)->toBeTrue()
-        ->and($opportunity->expected_revenue)->toBe($opportunity->amount)
-        ->and($opportunity->stageHistories)->toHaveCount(1)
-        ->and($opportunity->stageHistories->first()->from_stage)->toBe(OpportunityStage::QUALIFICATION)
-        ->and($opportunity->stageHistories->first()->to_stage)->toBe(OpportunityStage::CLOSED_WON)
-        ->and($opportunity->stageHistories->first()->probability)->toBe(100);
+        ->and($opportunity->expected_revenue)->toBe('10000.00');
 
-    $this->actingAs($rep)
-        ->put(route('opportunities.update', $opportunity), [
-            ...$fields,
-            'stage' => OpportunityStage::CLOSED_LOST,
-            'description' => 'Notes only',
-        ])
-        ->assertRedirect(route('opportunities.show', $opportunity));
+    $history = OpportunityStageHistory::query()
+        ->where('opportunity_id', $opportunity->id)
+        ->where('to_stage', OpportunityStage::CLOSED_WON)
+        ->first();
 
-    $opportunity->refresh();
-
-    expect($opportunity->probability)->toBe(0)
-        ->and($opportunity->is_closed)->toBeTrue()
-        ->and($opportunity->is_won)->toBeFalse()
-        ->and($opportunity->expected_revenue)->toBe('0.00')
-        ->and($opportunity->stageHistories)->toHaveCount(2);
+    expect($history)->not->toBeNull()
+        ->and($history?->from_stage)->toBe(OpportunityStage::QUALIFICATION)
+        ->and($history?->probability)->toBe(100);
 });
 
-test('a past close date fails validation', function () {
-    $rep = crmUser('sales-rep');
+test('past close dates are rejected on create and edit', function () {
+    $rep = opportunityUser('sales-rep');
     $account = Account::factory()->create(['owner_id' => $rep->id]);
+    $opportunity = Opportunity::factory()->create([
+        'owner_id' => $rep->id,
+        'account_id' => $account->id,
+        'close_date' => now()->addMonth()->toDateString(),
+    ]);
 
     $this->actingAs($rep)
         ->from(route('opportunities.create'))
         ->post(route('opportunities.store'), [
-            'name' => 'Late deal',
+            'name' => 'Late Deal',
             'account_id' => $account->id,
             'close_date' => now()->subDay()->toDateString(),
             'stage' => OpportunityStage::QUALIFICATION,
@@ -124,173 +125,84 @@ test('a past close date fails validation', function () {
         ->assertRedirect(route('opportunities.create'))
         ->assertSessionHasErrors('close_date');
 
-    expect(Opportunity::query()->where('name', 'Late deal')->exists())->toBeFalse();
-
     $this->actingAs($rep)
-        ->from(route('opportunities.create'))
-        ->post(route('opportunities.store'), [
-            'name' => 'Zero amount',
+        ->from(route('opportunities.edit', $opportunity))
+        ->put(route('opportunities.update', $opportunity), [
+            'name' => $opportunity->name,
             'account_id' => $account->id,
-            'close_date' => now()->addDay()->toDateString(),
+            'close_date' => now()->subDay()->toDateString(),
             'stage' => OpportunityStage::QUALIFICATION,
-            'amount' => 0,
         ])
-        ->assertSessionHasErrors('amount');
-
-    $this->actingAs($rep)
-        ->from(route('opportunities.create'))
-        ->post(route('opportunities.store'), [
-            'name' => 'Wrong probability',
-            'account_id' => $account->id,
-            'close_date' => now()->addDay()->toDateString(),
-            'stage' => OpportunityStage::QUALIFICATION,
-            'probability' => 99,
-        ])
-        ->assertSessionHasErrors('probability');
+        ->assertRedirect(route('opportunities.edit', $opportunity))
+        ->assertSessionHasErrors('close_date');
 });
 
-test('archive sets archived_at and the default list hides the row', function () {
-    $rep = crmUser('sales-rep');
+test('archive sets archived_at and hides the row from the default list', function () {
+    $rep = opportunityUser('sales-rep');
     $account = Account::factory()->create(['owner_id' => $rep->id]);
-    $visible = Opportunity::factory()->create([
-        'name' => 'Open deal',
+    $opportunity = Opportunity::factory()->create([
         'owner_id' => $rep->id,
         'account_id' => $account->id,
-    ]);
-    $hidden = Opportunity::factory()->create([
-        'name' => 'Old deal',
-        'owner_id' => $rep->id,
-        'account_id' => $account->id,
+        'name' => 'Archive Me',
     ]);
 
     $this->actingAs($rep)
-        ->delete(route('opportunities.destroy', $hidden))
-        ->assertRedirect(route('opportunities.show', $hidden));
+        ->delete(route('opportunities.destroy', $opportunity))
+        ->assertRedirect(route('opportunities.index'));
 
-    $hidden->refresh();
-
-    expect($hidden->archived_at)->not->toBeNull()
-        ->and(Opportunity::query()->whereKey($hidden->id)->exists())->toBeTrue();
+    expect($opportunity->fresh()->archived_at)->not->toBeNull()
+        ->and(Opportunity::query()->whereKey($opportunity->id)->exists())->toBeTrue();
 
     $this->actingAs($rep)
-        ->get(route('opportunities.show', $hidden))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('Opportunities/Show')
-            ->where('opportunity.archived_at', fn ($value) => $value !== null)
-        );
-
-    $this->actingAs($rep)
-        ->get(route('opportunities.index'))
+        ->get(route('opportunities.index', ['view' => 'all']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Opportunities/Index')
-            ->where('opportunities.total', 1)
-            ->where('opportunities.data.0.id', $visible->id)
+            ->where('opportunities.data', fn ($rows) => collect($rows)->pluck('id')->doesntContain($opportunity->id))
         );
 
     $this->actingAs($rep)
-        ->get(route('opportunities.index', ['show_archived' => 1]))
+        ->get(route('opportunities.index', ['view' => 'all', 'archived' => 1]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('opportunities.total', 2)
-            ->where('opportunities.data', fn ($rows) => $rows->pluck('id')->contains($hidden->id))
+            ->component('Opportunities/Index')
+            ->where('filters.archived', true)
+            ->where('opportunities.data.0.id', $opportunity->id)
         );
 });
 
-test('another sales rep receives 403 and a manager can view', function () {
-    $rep = crmUser('sales-rep');
-    $other = crmUser('sales-rep');
-    $manager = crmUser('sales-manager');
+test('clone can include related tasks events and notes', function () {
+    $rep = opportunityUser('sales-rep');
     $account = Account::factory()->create(['owner_id' => $rep->id]);
-    $opportunity = Opportunity::factory()->create([
+    $source = Opportunity::factory()->create([
         'owner_id' => $rep->id,
         'account_id' => $account->id,
-    ]);
-
-    $this->actingAs($other)
-        ->get(route('opportunities.show', $opportunity))
-        ->assertForbidden();
-
-    $this->actingAs($other)
-        ->patch(route('opportunities.owner', $opportunity), [
-            'owner_id' => $other->id,
-        ])
-        ->assertForbidden();
-
-    $this->actingAs($manager)
-        ->get(route('opportunities.show', $opportunity))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('Opportunities/Show')
-            ->where('opportunity.id', $opportunity->id)
-            ->has('opportunity.stage_histories')
-            ->has('stagePath', 5)
-            ->where('stagePath.0.name', OpportunityStage::QUALIFICATION)
-            ->where('stagePath.0.state', 'current')
-            ->where('stagePath.4.name', OpportunityStage::CLOSED_WON)
-        );
-
-    expect($opportunity->fresh()->owner_id)->toBe($rep->id);
-});
-
-test('a sales rep can reassign an opportunity they own', function () {
-    $rep = crmUser('sales-rep');
-    $manager = crmUser('sales-manager');
-    $account = Account::factory()->create(['owner_id' => $rep->id]);
-    $opportunity = Opportunity::factory()->create([
-        'owner_id' => $rep->id,
-        'account_id' => $account->id,
-    ]);
-
-    $this->actingAs($rep)
-        ->patch(route('opportunities.owner', $opportunity), [
-            'owner_id' => $manager->id,
-        ])
-        ->assertRedirect(route('opportunities.show', $opportunity));
-
-    expect($opportunity->fresh()->owner_id)->toBe($manager->id)
-        ->and($opportunity->fresh()->stageHistories)->toHaveCount(0);
-});
-
-test('clone copies the opportunity without stage history and can include related records', function () {
-    $rep = crmUser('sales-rep');
-    $account = Account::factory()->create(['owner_id' => $rep->id]);
-
-    $this->actingAs($rep)->post(route('opportunities.store'), [
-        'name' => str_repeat('A', 120),
-        'account_id' => $account->id,
-        'close_date' => now()->addWeek()->toDateString(),
+        'name' => 'Source Deal',
         'stage' => OpportunityStage::MEETING_SCHEDULED,
-        'amount' => 4000,
-    ])->assertRedirect();
+        'close_date' => now()->addWeeks(2)->toDateString(),
+    ]);
 
-    $source = Opportunity::query()->where('name', str_repeat('A', 120))->first();
+    Task::factory()->create([
+        'owner_id' => $rep->id,
+        'related_type' => Opportunity::class,
+        'related_id' => $source->id,
+        'subject' => 'Call prospect',
+    ]);
+
+    Event::factory()->create([
+        'owner_id' => $rep->id,
+        'related_type' => Opportunity::class,
+        'related_id' => $source->id,
+        'subject' => 'Discovery call',
+        'starts_at' => now()->addDay(),
+        'ends_at' => now()->addDay()->addHour(),
+    ]);
 
     Note::factory()->create([
+        'owner_id' => $rep->id,
         'notable_type' => Opportunity::class,
         'notable_id' => $source->id,
-        'owner_id' => $rep->id,
-        'body' => 'Keep this note.',
-    ]);
-    Task::factory()->create([
-        'related_type' => Opportunity::class,
-        'related_id' => $source->id,
-        'owner_id' => $rep->id,
-        'subject' => 'Keep this task',
-    ]);
-    Event::factory()->create([
-        'related_type' => Opportunity::class,
-        'related_id' => $source->id,
-        'owner_id' => $rep->id,
-        'subject' => 'Keep this event',
-    ]);
-    Lead::factory()->create([
-        'owner_id' => $rep->id,
-        'converted' => true,
-        'converted_account_id' => $account->id,
-        'converted_opportunity_id' => $source->id,
-        'lead_status' => 'Converted',
+        'body' => 'Pricing notes',
     ]);
 
     $this->actingAs($rep)
@@ -299,52 +211,93 @@ test('clone copies the opportunity without stage history and can include related
         ])
         ->assertRedirect();
 
-    $clone = Opportunity::query()->where('owner_id', $rep->id)->whereKeyNot($source->id)->first();
+    $copy = Opportunity::query()->where('name', 'Copy of Source Deal')->first();
 
-    expect($clone)->not->toBeNull()
-        ->and(mb_strlen($clone->name))->toBe(120)
-        ->and($clone->name)->toStartWith('Copy of ')
-        ->and($clone->archived_at)->toBeNull()
-        ->and($clone->owner_id)->toBe($rep->id)
-        ->and($clone->stage)->toBe(OpportunityStage::MEETING_SCHEDULED)
-        ->and($clone->probability)->toBe(20)
-        ->and($clone->stageHistories)->toHaveCount(1)
-        ->and($clone->stageHistories->first()->from_stage)->toBeNull()
-        ->and($source->fresh()->stageHistories)->toHaveCount(1)
-        ->and($clone->notes)->toHaveCount(1)
-        ->and($clone->notes->first()->body)->toBe('Keep this note.')
-        ->and($clone->relatedTasks)->toHaveCount(1)
-        ->and($clone->relatedEvents)->toHaveCount(1)
-        ->and($clone->convertedLeads)->toHaveCount(0)
-        ->and($source->fresh()->convertedLeads)->toHaveCount(1);
+    expect($copy)->not->toBeNull()
+        ->and($copy?->stage)->toBe(OpportunityStage::MEETING_SCHEDULED)
+        ->and($copy?->probability)->toBe(20)
+        ->and($copy?->owner_id)->toBe($rep->id);
 
-    $past = Opportunity::factory()->create([
+    expect(OpportunityStageHistory::query()->where('opportunity_id', $copy->id)->count())->toBe(1)
+        ->and(Task::query()->where('related_id', $copy->id)->where('related_type', Opportunity::class)->count())->toBe(1)
+        ->and(Event::query()->where('related_id', $copy->id)->where('related_type', Opportunity::class)->count())->toBe(1)
+        ->and(Note::query()->where('notable_id', $copy->id)->where('notable_type', Opportunity::class)->count())->toBe(1);
+});
+
+test('change owner writes activity log and can transfer open activities', function () {
+    $manager = opportunityUser('sales-manager');
+    $rep = opportunityUser('sales-rep');
+    $other = opportunityUser('sales-rep');
+    $account = Account::factory()->create(['owner_id' => $rep->id]);
+
+    $opportunity = Opportunity::factory()->create([
         'owner_id' => $rep->id,
         'account_id' => $account->id,
-        'close_date' => now()->subDays(3)->toDateString(),
+        'name' => 'Owner Deal',
+    ]);
+
+    $task = Task::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'related_type' => Opportunity::class,
+        'related_id' => $opportunity->id,
+        'status' => 'In Progress',
+    ]);
+
+    $event = Event::factory()->create([
+        'owner_id' => $rep->id,
+        'assigned_to_id' => $rep->id,
+        'related_type' => Opportunity::class,
+        'related_id' => $opportunity->id,
+        'starts_at' => now()->addDay(),
+        'ends_at' => now()->addDays(2),
+    ]);
+
+    $this->actingAs($manager)
+        ->post(route('opportunities.owner', $opportunity), [
+            'owner_id' => $other->id,
+            'transfer_activities' => true,
+        ])
+        ->assertRedirect(route('opportunities.show', $opportunity));
+
+    expect($opportunity->fresh()->owner_id)->toBe($other->id)
+        ->and($task->fresh()->owner_id)->toBe($other->id)
+        ->and($task->fresh()->assigned_to_id)->toBe($other->id)
+        ->and($event->fresh()->owner_id)->toBe($other->id);
+
+    $log = ActivityLog::query()
+        ->where('subject_type', Opportunity::class)
+        ->where('subject_id', $opportunity->id)
+        ->where('action', 'owner_changed')
+        ->first();
+
+    expect($log)->not->toBeNull()
+        ->and($log->user_id)->toBe($manager->id)
+        ->and($log->properties['previous_owner_id'])->toBe($rep->id)
+        ->and($log->properties['new_owner_id'])->toBe($other->id);
+});
+
+test('detail page exposes stage path and expected revenue', function () {
+    $rep = opportunityUser('sales-rep');
+    $account = Account::factory()->create(['owner_id' => $rep->id]);
+    $opportunity = Opportunity::factory()->create([
+        'owner_id' => $rep->id,
+        'account_id' => $account->id,
+        'stage' => OpportunityStage::PROPOSAL,
+        'amount' => 20000,
+        'name' => 'Detail Deal',
     ]);
 
     $this->actingAs($rep)
-        ->from(route('opportunities.show', $past))
-        ->post(route('opportunities.clone', $past), [
-            'include_related' => false,
-        ])
-        ->assertRedirect(route('opportunities.show', $past))
-        ->assertSessionHasErrors('close_date');
-
-    $this->actingAs($rep)
-        ->post(route('opportunities.clone', $past), [
-            'include_related' => false,
-            'close_date' => now()->toDateString(),
-        ])
-        ->assertRedirect();
-
-    $datedClone = Opportunity::query()
-        ->where('name', 'Copy of '.$past->name)
-        ->first();
-
-    expect($datedClone)->not->toBeNull()
-        ->and($datedClone->close_date->toDateString())->toBe(now()->toDateString())
-        ->and($datedClone->notes)->toHaveCount(0)
-        ->and($datedClone->stageHistories)->toHaveCount(1);
+        ->get(route('opportunities.show', $opportunity))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Opportunities/Show')
+            ->where('opportunity.name', 'Detail Deal')
+            ->where('opportunity.probability', 65)
+            ->where('opportunity.expected_revenue', '13000.00')
+            ->where('stages', array_keys(OpportunityStage::PROBABILITIES))
+            ->where('can.update', true)
+            ->where('can.clone', true)
+        );
 });

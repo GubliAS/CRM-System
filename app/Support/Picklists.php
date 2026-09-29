@@ -65,6 +65,15 @@ class Picklists
     /**
      * @var list<string>
      */
+    public const OPPORTUNITY_TYPES = [
+        'New Business',
+        'Existing Business',
+        'Renewal',
+    ];
+
+    /**
+     * @var list<string>
+     */
     public const LEAD_RATINGS = [
         'Hot',
         'Warm',
@@ -130,15 +139,6 @@ class Picklists
         'Breakdown',
         'Usage / How-to',
         'Other',
-    ];
-
-    /**
-     * @var list<string>
-     */
-    public const OPPORTUNITY_TYPES = [
-        'New Business',
-        'Existing Business',
-        'Renewal',
     ];
 
     /**
