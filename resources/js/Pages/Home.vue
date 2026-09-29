@@ -71,14 +71,42 @@ function onDocumentKey(event) {
     }
 }
 
+// Scroll reveal: a card's entrance animations (and everything inside it) stay
+// paused until it is on screen. See "Home load choreography" in app.css.
+let revealObserver = null;
+
 onMounted(() => {
     document.addEventListener('keydown', onDocumentKey);
     window.addEventListener('scroll', closeRowMenu, true);
+
+    const targets = document.querySelectorAll(
+        '.crm-ov-card, .crm-ov-stat, .crm-ov-spot, .crm-ov-cta',
+    );
+
+    if (typeof IntersectionObserver === 'undefined') {
+        targets.forEach((el) => el.classList.add('is-in'));
+
+        return;
+    }
+
+    revealObserver = new IntersectionObserver(
+        (entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-in');
+                    revealObserver.unobserve(entry.target);
+                }
+            }
+        },
+        { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+    );
+    targets.forEach((el) => revealObserver.observe(el));
 });
 
 onBeforeUnmount(() => {
     document.removeEventListener('keydown', onDocumentKey);
     window.removeEventListener('scroll', closeRowMenu, true);
+    revealObserver?.disconnect();
 });
 
 const chartMetric = ref('value');

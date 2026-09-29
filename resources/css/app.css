@@ -1662,6 +1662,21 @@
     .crm-ov-side > :nth-child(4) { animation-delay: 0.31s; }
     .crm-ov-side > :nth-child(5) { animation-delay: 0.38s; }
 
+    /*
+     * Scroll reveal: until a card gets .is-in (IntersectionObserver in Home.vue)
+     * it and everything inside it sit on their first keyframe, paused. Delays
+     * therefore count from the moment the card scrolls into view.
+     */
+    .crm-ov-card:not(.is-in),
+    .crm-ov-card:not(.is-in) *,
+    .crm-ov-stat:not(.is-in),
+    .crm-ov-stat:not(.is-in) *,
+    .crm-ov-spot:not(.is-in),
+    .crm-ov-spot:not(.is-in) *,
+    .crm-ov-cta:not(.is-in) {
+        animation-play-state: paused !important;
+    }
+
     /* Pipeline columns grow up from the baseline, left to right. */
     .crm-ov-bar-fill {
         transform-origin: bottom;
