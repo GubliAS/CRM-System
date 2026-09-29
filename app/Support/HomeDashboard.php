@@ -34,14 +34,19 @@ class HomeDashboard
         $today = now()->toDateString();
 
         $pipeline = $this->pipelineFunnel($user, $yearStart, $yearEnd);
+        $pipelineTotal = round((float) collect($pipeline)->sum('value'), 2);
+        $pipeline = $this->withPercents($pipeline, $pipelineTotal);
+
         $revenueBySource = $this->revenueByLeadSource($user, $yearStart, $yearEnd);
+        $revenueBySourceTotal = round((float) collect($revenueBySource)->sum('value'), 2);
+        $revenueBySource = $this->withPercents($revenueBySource, $revenueBySourceTotal);
 
         return [
             'year' => $year,
             'pipeline' => $pipeline,
-            'pipelineTotal' => collect($pipeline)->sum('value'),
+            'pipelineTotal' => $pipelineTotal,
             'revenueBySource' => $revenueBySource,
-            'revenueBySourceTotal' => collect($revenueBySource)->sum('value'),
+            'revenueBySourceTotal' => $revenueBySourceTotal,
             'tasksDueToday' => $this->tasksDueToday($user, $today),
             'eventsToday' => $this->eventsToday($user, $today),
             'keyOpportunities' => $this->keyOpenOpportunities($user),
@@ -50,7 +55,7 @@ class HomeDashboard
     }
 
     /**
-     * @return list<array{stage: string, count: int, value: float, href: string}>
+     * @return list<array{stage: string, count: int, value: float, percent: float, href: string}>
      */
     private function pipelineFunnel(User $user, Carbon $yearStart, Carbon $yearEnd): array
     {
@@ -72,6 +77,7 @@ class HomeDashboard
                 'stage' => $stage,
                 'count' => (int) ($row?->aggregate_count ?? 0),
                 'value' => round((float) ($row?->aggregate_value ?? 0), 2),
+                'percent' => 0.0,
                 'href' => route('opportunities.index', ['stage' => $stage, 'year' => $yearStart->year]),
             ];
         }
@@ -80,7 +86,7 @@ class HomeDashboard
     }
 
     /**
-     * @return list<array{source: string, count: int, value: float}>
+     * @return list<array{source: string, count: int, value: float, percent: float}>
      */
     private function revenueByLeadSource(User $user, Carbon $yearStart, Carbon $yearEnd): array
     {
@@ -101,9 +107,26 @@ class HomeDashboard
                     : (string) $row->lead_source,
                 'count' => (int) $row->aggregate_count,
                 'value' => round((float) $row->aggregate_value, 2),
+                'percent' => 0.0,
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function withPercents(array $rows, float $total): array
+    {
+        return array_map(function (array $row) use ($total): array {
+            $value = (float) ($row['value'] ?? 0);
+            $row['percent'] = $total > 0
+                ? round(($value / $total) * 100, 1)
+                : 0.0;
+
+            return $row;
+        }, $rows);
     }
 
     /**
@@ -127,6 +150,7 @@ class HomeDashboard
                 'priority' => $task->priority,
                 'related_label' => $this->relatedLabel($task->related),
                 'can_complete' => $user->can('update', $task),
+                'url' => route('tasks.show', $task),
             ])
             ->all();
     }
@@ -155,6 +179,7 @@ class HomeDashboard
                 'all_day' => (bool) $event->all_day,
                 'location' => $event->location,
                 'related_label' => $this->relatedLabel($event->related),
+                'url' => route('events.show', $event),
             ])
             ->all();
     }

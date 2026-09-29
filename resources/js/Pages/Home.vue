@@ -3,6 +3,8 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { display, formatDay, formatMoney, formatWhen } from '@/display';
+import { stageToneClass } from '@/forms/opportunity';
+import { priorityClass } from '@/forms/task';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -18,16 +20,16 @@ const props = defineProps({
     recommendations: { type: Array, required: true },
 });
 
-const maxPipelineValue = computed(() => {
-    const values = props.pipeline.map((row) => Number(row.value) || 0);
+const pipelineIsEmpty = computed(() => Number(props.pipelineTotal) === 0);
 
-    return Math.max(...values, 1);
-});
+const revenueIsEmpty = computed(() => props.revenueBySource.length === 0);
 
-const maxSourceValue = computed(() => {
-    const values = props.revenueBySource.map((row) => Number(row.value) || 0);
+const todayDate = computed(() => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
 
-    return Math.max(...values, 1);
+    return `${now.getFullYear()}-${month}-${day}`;
 });
 
 function completeTask(taskId) {
@@ -58,10 +60,20 @@ function eventWhen(event) {
     return formatWhen(event.starts_at);
 }
 
-function barWidth(value, max) {
+function barWidthFromPercent(percent) {
+    const amount = Number(percent) || 0;
+
+    if (amount <= 0) {
+        return '0%';
+    }
+
+    return `${Math.max(amount, 4)}%`;
+}
+
+function formatPercent(value) {
     const amount = Number(value) || 0;
 
-    return `${Math.max((amount / max) * 100, amount > 0 ? 4 : 0)}%`;
+    return `${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(1)}%`;
 }
 </script>
 
@@ -69,38 +81,88 @@ function barWidth(value, max) {
     <AuthenticatedLayout>
         <Head title="Home" />
 
-        <div class="mx-auto max-w-7xl space-y-6 px-4 py-6">
-            <div>
-                <h1 class="text-h1">Home</h1>
-                <p class="mt-1 text-small text-text-muted">
-                    Pipeline and activity for {{ year }}.
+        <div class="crm-page space-y-6">
+            <header class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h1 class="text-h1">Home</h1>
+                    <p class="mt-1 text-body text-text-muted">
+                        Pipeline, revenue, and today’s activity.
+                    </p>
+                </div>
+                <p
+                    class="crm-chip inline-flex min-h-11 items-center px-3 text-small font-semibold"
+                    aria-label="Reporting year"
+                >
+                    Reporting year {{ year }}
                 </p>
-            </div>
+            </header>
 
-            <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <section class="rounded-md border border-border bg-surface p-4">
-                    <div class="flex flex-wrap items-end justify-between gap-2">
-                        <h2 class="text-h2">Pipeline funnel</h2>
-                        <p class="text-body text-text-muted">
-                            Total value {{ formatMoney(pipelineTotal) }}
+            <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+                <section
+                    class="crm-panel w-full"
+                    aria-labelledby="home-pipeline-heading"
+                >
+                    <div class="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+                        <h2 id="home-pipeline-heading" class="text-h2">
+                            Pipeline funnel
+                        </h2>
+                        <p class="text-small text-text-muted">
+                            Total
+                            <span class="text-body font-semibold text-text">
+                                {{ formatMoney(pipelineTotal) }}
+                            </span>
                         </p>
                     </div>
-                    <ul class="mt-4 space-y-3">
+
+                    <div
+                        v-if="pipelineIsEmpty"
+                        class="mt-3 rounded-md bg-bg px-3 py-3"
+                    >
+                        <p class="text-body text-text-muted">
+                            No pipeline opportunities for {{ year }}.
+                        </p>
+                        <p class="mt-1 text-small text-text-muted">
+                            Open a stage to create or filter deals.
+                        </p>
+                        <ul class="mt-3 flex flex-wrap gap-2" role="list">
+                            <li v-for="row in pipeline" :key="row.stage">
+                                <Link
+                                    :href="row.href"
+                                    class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-3 text-small text-primary hover:bg-primary-soft focus:outline-none focus:ring-2 focus:ring-secondary"
+                                    :aria-label="`${row.stage}: 0 opportunities`"
+                                >
+                                    {{ row.stage }}
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <ul v-else class="mt-4 space-y-4" role="list">
                         <li v-for="row in pipeline" :key="row.stage">
                             <Link
                                 :href="row.href"
                                 class="block rounded-md focus:outline-none focus:ring-2 focus:ring-secondary"
+                                :aria-label="`${row.stage}: ${row.count} opportunities, ${formatMoney(row.value)}, ${formatPercent(row.percent)} of pipeline`"
                             >
-                                <div class="flex flex-wrap items-baseline justify-between gap-2">
-                                    <span class="text-body text-primary">{{ row.stage }}</span>
+                                <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                    <span class="text-body font-semibold text-primary">
+                                        {{ row.stage }}
+                                    </span>
                                     <span class="text-small text-text-muted">
-                                        {{ row.count }} · {{ formatMoney(row.value) }}
+                                        <span class="text-text">{{ row.count }}</span>
+                                        · {{ formatMoney(row.value) }}
+                                        · {{ formatPercent(row.percent) }}
                                     </span>
                                 </div>
-                                <div class="mt-1 h-2 rounded bg-bg">
+                                <div
+                                    class="mt-2 h-3 overflow-hidden rounded-md bg-bg"
+                                    role="presentation"
+                                >
                                     <div
-                                        class="h-2 rounded bg-secondary"
-                                        :style="{ width: barWidth(row.value, maxPipelineValue) }"
+                                        class="h-3 rounded-md bg-secondary transition-all duration-fast"
+                                        :style="{
+                                            width: barWidthFromPercent(row.percent),
+                                        }"
                                     />
                                 </div>
                             </Link>
@@ -108,62 +170,116 @@ function barWidth(value, max) {
                     </ul>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
-                    <div class="flex flex-wrap items-end justify-between gap-2">
-                        <h2 class="text-h2">Revenue by lead source</h2>
-                        <p class="text-body text-text-muted">
-                            Total {{ formatMoney(revenueBySourceTotal) }}
+                <section
+                    class="crm-panel w-full"
+                    :class="revenueIsEmpty ? 'xl:self-start' : ''"
+                    aria-labelledby="home-revenue-heading"
+                >
+                    <div class="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+                        <h2 id="home-revenue-heading" class="text-h2">
+                            Revenue by lead source
+                        </h2>
+                        <p class="text-small text-text-muted">
+                            Total
+                            <span class="text-body font-semibold text-text">
+                                {{ formatMoney(revenueBySourceTotal) }}
+                            </span>
                         </p>
                     </div>
-                    <p
-                        v-if="revenueBySource.length === 0"
-                        class="mt-4 text-body text-text-muted"
+
+                    <div
+                        v-if="revenueIsEmpty"
+                        class="mt-3 rounded-md bg-bg px-3 py-3"
                     >
-                        No opportunity revenue for {{ year }}.
-                    </p>
-                    <ul v-else class="mt-4 space-y-3">
+                        <p class="text-body text-text-muted">
+                            No opportunity revenue for {{ year }}.
+                        </p>
+                    </div>
+
+                    <ul v-else class="mt-4 space-y-4" role="list">
                         <li v-for="row in revenueBySource" :key="row.source">
-                            <div class="flex flex-wrap items-baseline justify-between gap-2">
-                                <span class="text-body">{{ row.source }}</span>
+                            <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                <span class="text-body font-semibold text-text">
+                                    {{ row.source }}
+                                </span>
                                 <span class="text-small text-text-muted">
-                                    {{ row.count }} · {{ formatMoney(row.value) }}
+                                    <span class="text-text">{{ row.count }}</span>
+                                    · {{ formatMoney(row.value) }}
+                                    · {{ formatPercent(row.percent) }}
                                 </span>
                             </div>
-                            <div class="mt-1 h-2 rounded bg-bg">
+                            <div
+                                class="mt-2 h-3 overflow-hidden rounded-md bg-bg"
+                                role="presentation"
+                            >
                                 <div
-                                    class="h-2 rounded bg-primary"
-                                    :style="{ width: barWidth(row.value, maxSourceValue) }"
+                                    class="h-3 rounded-md bg-primary transition-all duration-fast"
+                                    :style="{
+                                        width: barWidthFromPercent(row.percent),
+                                    }"
                                 />
                             </div>
                         </li>
                     </ul>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
-                    <h2 class="text-h2">Tasks due today</h2>
-                    <p
+                <section
+                    class="crm-panel w-full"
+                    aria-labelledby="home-tasks-heading"
+                >
+                    <div class="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+                        <div>
+                            <h2 id="home-tasks-heading" class="text-h2">
+                                Tasks due today
+                            </h2>
+                            <p class="mt-0.5 text-small text-text-muted">
+                                {{ tasksDueToday.length }} due
+                            </p>
+                        </div>
+                        <Link
+                            :href="route('tasks.index', { view: 'today' })"
+                            class="inline-flex min-h-11 items-center text-body text-secondary underline"
+                        >
+                            View all tasks
+                        </Link>
+                    </div>
+
+                    <div
                         v-if="tasksDueToday.length === 0"
-                        class="mt-4 text-body text-text-muted"
+                        class="mt-3 rounded-md bg-bg px-3 py-3"
                     >
-                        No tasks due today.
-                    </p>
-                    <ul v-else class="mt-4 divide-y divide-border">
+                        <p class="text-body text-text-muted">
+                            No tasks due today.
+                        </p>
+                    </div>
+
+                    <ul v-else class="mt-1 divide-y divide-border" role="list">
                         <li
                             v-for="task in tasksDueToday"
                             :key="task.id"
                             class="flex flex-wrap items-center justify-between gap-3 py-3"
                         >
-                            <div>
-                                <p class="text-body">{{ task.subject }}</p>
-                                <p class="text-small text-text-muted">
+                            <div class="min-w-0 flex-1">
+                                <Link
+                                    :href="task.url"
+                                    class="text-body font-semibold text-secondary underline"
+                                >
+                                    {{ task.subject }}
+                                </Link>
+                                <p class="mt-1 text-small text-text-muted">
                                     {{ display(task.related_label) }}
-                                    · {{ display(task.priority) }}
+                                    ·
+                                    <span :class="priorityClass(task.priority)">
+                                        {{ display(task.priority) }}
+                                    </span>
+                                    · Due {{ formatDay(task.due_on) }}
                                 </p>
                             </div>
                             <PrimaryButton
                                 v-if="task.can_complete"
                                 type="button"
-                                class="min-h-11"
+                                class="min-h-11 shrink-0"
+                                :aria-label="`Complete task ${task.subject}`"
                                 @click="completeTask(task.id)"
                             >
                                 Complete
@@ -172,65 +288,128 @@ function barWidth(value, max) {
                     </ul>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
-                    <h2 class="text-h2">Today's events</h2>
-                    <p
+                <section
+                    class="crm-panel w-full"
+                    aria-labelledby="home-events-heading"
+                >
+                    <div class="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+                        <div>
+                            <h2 id="home-events-heading" class="text-h2">
+                                Today's events
+                            </h2>
+                            <p class="mt-0.5 text-small text-text-muted">
+                                {{ eventsToday.length }} scheduled
+                            </p>
+                        </div>
+                        <Link
+                            :href="
+                                route('events.index', {
+                                    view: 'day',
+                                    date: todayDate,
+                                })
+                            "
+                            class="inline-flex min-h-11 items-center text-body text-secondary underline"
+                        >
+                            View calendar
+                        </Link>
+                    </div>
+
+                    <div
                         v-if="eventsToday.length === 0"
-                        class="mt-4 text-body text-text-muted"
+                        class="mt-3 rounded-md bg-bg px-3 py-3"
                     >
-                        No events scheduled for today.
-                    </p>
-                    <ul v-else class="mt-4 divide-y divide-border">
+                        <p class="text-body text-text-muted">
+                            No events scheduled for today.
+                        </p>
+                    </div>
+
+                    <ul v-else class="mt-1 divide-y divide-border" role="list">
                         <li
                             v-for="event in eventsToday"
                             :key="event.id"
                             class="py-3"
                         >
-                            <p class="text-body">{{ event.subject }}</p>
-                            <p class="text-small text-text-muted">
-                                {{ eventWhen(event) }}
-                                <span v-if="event.location"> · {{ event.location }}</span>
-                                <span v-if="event.related_label">
-                                    · {{ event.related_label }}
-                                </span>
-                            </p>
+                            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                <p class="min-w-[5.5rem] shrink-0 text-small font-semibold text-text">
+                                    {{ eventWhen(event) }}
+                                </p>
+                                <div class="min-w-0 flex-1">
+                                    <Link
+                                        :href="event.url"
+                                        class="text-body font-semibold text-secondary underline"
+                                    >
+                                        {{ event.subject }}
+                                    </Link>
+                                    <p class="mt-1 text-small text-text-muted">
+                                        <span v-if="event.location">{{ event.location }}</span>
+                                        <span
+                                            v-if="event.location && event.related_label"
+                                            aria-hidden="true"
+                                        >
+                                            ·
+                                        </span>
+                                        <span v-if="event.related_label">
+                                            {{ event.related_label }}
+                                        </span>
+                                        <span
+                                            v-if="!event.location && !event.related_label"
+                                        >
+                                            —
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
                         </li>
                     </ul>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4 xl:col-span-2">
-                    <div class="flex flex-wrap items-end justify-between gap-2">
-                        <h2 class="text-h2">Key open opportunities</h2>
+                <section
+                    class="crm-panel w-full xl:col-span-2"
+                    aria-labelledby="home-deals-heading"
+                >
+                    <div class="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+                        <div>
+                            <h2 id="home-deals-heading" class="text-h2">
+                                Key open opportunities
+                            </h2>
+                            <p class="mt-0.5 text-small text-text-muted">
+                                Highest-value open deals
+                            </p>
+                        </div>
                         <Link
                             :href="route('opportunities.index')"
-                            class="text-body text-secondary underline"
+                            class="inline-flex min-h-11 items-center text-body text-secondary underline"
                         >
                             View all
                         </Link>
                     </div>
-                    <p
+
+                    <div
                         v-if="keyOpportunities.length === 0"
-                        class="mt-4 text-body text-text-muted"
+                        class="mt-3 rounded-md bg-bg px-3 py-3"
                     >
-                        No open opportunities.
-                    </p>
+                        <p class="text-body text-text-muted">
+                            No open opportunities.
+                        </p>
+                    </div>
+
                     <div v-else class="mt-4 overflow-x-auto">
-                        <table class="min-w-full text-left text-body">
-                            <thead class="border-b border-border text-small text-text-muted">
+                        <table class="crm-table">
+                            <thead>
                                 <tr>
-                                    <th class="px-2 py-2 font-medium">Name</th>
-                                    <th class="px-2 py-2 font-medium">Account</th>
-                                    <th class="px-2 py-2 font-medium">Amount</th>
-                                    <th class="px-2 py-2 font-medium">Close date</th>
-                                    <th class="px-2 py-2 font-medium">Stage</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Account</th>
+                                    <th scope="col">Amount</th>
+                                    <th scope="col">Close date</th>
+                                    <th scope="col">Stage</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-border">
+                            <tbody>
                                 <tr
                                     v-for="opportunity in keyOpportunities"
                                     :key="opportunity.id"
                                 >
-                                    <td class="px-2 py-3">
+                                    <td>
                                         <Link
                                             :href="opportunity.url"
                                             class="text-secondary underline"
@@ -238,7 +417,7 @@ function barWidth(value, max) {
                                             {{ opportunity.name }}
                                         </Link>
                                     </td>
-                                    <td class="px-2 py-3">
+                                    <td>
                                         <Link
                                             v-if="opportunity.account"
                                             :href="
@@ -253,14 +432,16 @@ function barWidth(value, max) {
                                         </Link>
                                         <span v-else>—</span>
                                     </td>
-                                    <td class="px-2 py-3">
+                                    <td>
                                         {{ formatMoney(opportunity.amount) }}
                                     </td>
-                                    <td class="px-2 py-3">
+                                    <td>
                                         {{ formatDay(opportunity.close_date) }}
                                     </td>
-                                    <td class="px-2 py-3">
-                                        {{ opportunity.stage }}
+                                    <td>
+                                        <span :class="stageToneClass(opportunity.stage)">
+                                            {{ opportunity.stage }}
+                                        </span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -268,24 +449,38 @@ function barWidth(value, max) {
                     </div>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4 xl:col-span-2">
-                    <h2 class="text-h2">Assistant</h2>
-                    <p
+                <section
+                    class="crm-panel w-full xl:col-span-2"
+                    aria-labelledby="home-assistant-heading"
+                >
+                    <div class="border-b border-border pb-3">
+                        <h2 id="home-assistant-heading" class="text-h2">
+                            Assistant
+                        </h2>
+                        <p class="mt-0.5 text-small text-text-muted">
+                            Suggested follow-ups from inactive accounts and stale deals
+                        </p>
+                    </div>
+
+                    <div
                         v-if="recommendations.length === 0"
-                        class="mt-4 text-body text-text-muted"
+                        class="mt-3 rounded-md bg-bg px-3 py-3"
                     >
-                        No recommendations right now.
-                    </p>
-                    <ul v-else class="mt-4 space-y-3">
+                        <p class="text-body text-text-muted">
+                            No recommendations right now.
+                        </p>
+                    </div>
+
+                    <ul v-else class="mt-4 space-y-3" role="list">
                         <li
                             v-for="recommendation in recommendations"
                             :key="recommendation.key"
-                            class="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border p-3"
+                            class="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-bg p-3"
                         >
-                            <div>
+                            <div class="min-w-0 flex-1">
                                 <Link
                                     :href="recommendation.url"
-                                    class="text-body text-secondary underline"
+                                    class="text-body font-semibold text-secondary underline"
                                 >
                                     {{ recommendation.title }}
                                 </Link>
@@ -295,7 +490,8 @@ function barWidth(value, max) {
                             </div>
                             <SecondaryButton
                                 type="button"
-                                class="min-h-11"
+                                class="min-h-11 shrink-0"
+                                :aria-label="`Dismiss recommendation for ${recommendation.title}`"
                                 @click="dismissRecommendation(recommendation)"
                             >
                                 Dismiss
