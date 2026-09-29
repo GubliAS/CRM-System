@@ -22,7 +22,7 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout title="Forgot password">
         <Head title="Forgot Password" />
 
         <div class="mb-4 text-body text-text-muted">

@@ -7,6 +7,9 @@ use Illuminate\Foundation\Bootstrap\LoadConfiguration;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 $app = Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,7 +26,20 @@ $app = Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
+            if ($response->getStatusCode() !== 403 || $request->expectsJson()) {
+                return $response;
+            }
+
+            $user = $request->user();
+
+            return Inertia::render('Errors/Forbidden', [
+                'message' => 'You do not have access to this page.',
+                'missingRole' => $user !== null && $user->role_id === null,
+            ])
+                ->toResponse($request)
+                ->setStatusCode(403);
+        });
     })->create();
 
 // Laravel merges vendor framework configs at boot; skip vendor database.php

@@ -8,6 +8,7 @@ import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import StatusBadge from '@/Components/StatusBadge.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { display, formatWhen, fullName, personName } from '@/display';
 import { priorityClass } from '@/forms/case';
@@ -48,6 +49,24 @@ watch(
 );
 
 const title = computed(() => props.caseRecord.case_number || 'Case');
+
+const statusTone = computed(() => {
+    const value = String(props.caseRecord.status ?? '').toLowerCase();
+
+    if (value === 'closed') {
+        return 'neutral';
+    }
+
+    if (value === 'escalated') {
+        return 'danger';
+    }
+
+    if (value === 'new') {
+        return 'info';
+    }
+
+    return 'warning';
+});
 
 const deleteError = computed(() => {
     const value = deleteForm.errors.delete || page.props.errors?.delete || '';
@@ -115,12 +134,15 @@ function reopenCase() {
     <AuthenticatedLayout>
         <Head :title="title" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h1 class="break-words text-h1">{{ title }}</h1>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="break-words text-h1">{{ title }}</h1>
+                        <StatusBadge :tone="statusTone">{{ caseRecord.status }}</StatusBadge>
+                    </div>
                     <p class="mt-1 text-body text-text-muted">
-                        {{ display(caseRecord.subject) }} · {{ display(caseRecord.status) }}
+                        {{ display(caseRecord.subject) }}
                         <span v-if="caseRecord.is_closed" class="text-warning"> · Closed (read-only)</span>
                     </p>
                 </div>
@@ -161,7 +183,7 @@ function reopenCase() {
                     <Link
                         v-if="can.update"
                         :href="route('cases.edit', caseRecord.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Edit
                     </Link>
@@ -179,7 +201,7 @@ function reopenCase() {
             <InputError class="mt-3" :message="deleteError" />
 
             <div class="mt-6 space-y-4">
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Case details</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Case number" :value="caseRecord.case_number" />
@@ -219,7 +241,7 @@ function reopenCase() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Web information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Web name" :value="caseRecord.web_name" />
@@ -229,7 +251,7 @@ function reopenCase() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">System information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Opened" :value="formatWhen(caseRecord.created_at)" />

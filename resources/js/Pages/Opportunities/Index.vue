@@ -102,7 +102,7 @@ function changePerPage(event) {
     <AuthenticatedLayout>
         <Head title="Opportunities" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 class="text-h1">Opportunities</h1>
@@ -113,7 +113,7 @@ function changePerPage(event) {
                 <Link
                     v-if="can.create"
                     :href="route('opportunities.create')"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary"
                 >
                     New opportunity
                 </Link>
@@ -144,15 +144,15 @@ function changePerPage(event) {
                 </label>
                 <button
                     type="submit"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary"
                 >
                     Search
                 </button>
             </form>
 
-            <div class="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
-                <table class="min-w-full text-left text-body">
-                    <thead class="bg-bg text-small text-text-muted">
+            <div class="mt-4 crm-table-wrap">
+                <table class="crm-table">
+                    <thead>
                         <tr>
                             <th v-for="column in columns" :key="column.key" scope="col" class="px-3 py-2">
                                 <Link

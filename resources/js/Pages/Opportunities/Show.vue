@@ -7,6 +7,7 @@ import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import StatusBadge from '@/Components/StatusBadge.vue';
 import TextInput from '@/Components/TextInput.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { display, formatDay, formatMoney, formatWhen, personName } from '@/display';
@@ -81,6 +82,18 @@ function stageClass(stage) {
     return 'text-secondary';
 }
 
+function stageTone(stage) {
+    if (stage === 'Closed Won') {
+        return 'success';
+    }
+
+    if (stage === 'Closed Lost') {
+        return 'danger';
+    }
+
+    return 'info';
+}
+
 function archive() {
     archiveForm.delete(route('opportunities.destroy', props.opportunity.id), {
         onSuccess: () => {
@@ -122,14 +135,21 @@ function submitClone() {
     <AuthenticatedLayout>
         <Head :title="opportunity.name" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-start justify-between gap-3">
-                <h1 class="break-words text-h1">{{ opportunity.name }}</h1>
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="break-words text-h1">{{ opportunity.name }}</h1>
+                        <StatusBadge :tone="stageTone(opportunity.stage)">
+                            {{ opportunity.stage }}
+                        </StatusBadge>
+                    </div>
+                </div>
                 <div class="flex flex-wrap gap-2">
                     <Link
                         v-if="can.update"
                         :href="route('opportunities.edit', opportunity.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Edit
                     </Link>
@@ -171,7 +191,7 @@ function submitClone() {
             </ol>
 
             <div class="mt-6 space-y-4">
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Key metrics</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                         <DetailField label="Amount" :value="formatMoney(opportunity.amount)" />
@@ -180,7 +200,7 @@ function submitClone() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Opportunity details</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Opportunity name" :value="opportunity.name" />
@@ -206,7 +226,7 @@ function submitClone() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">System information</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Created by" :value="personName(opportunity.created_by)" />
@@ -216,10 +236,10 @@ function submitClone() {
                     </dl>
                 </section>
 
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Stage history</h2>
                     <div class="mt-4 overflow-x-auto">
-                        <table class="min-w-full text-left text-body">
+                        <table class="crm-table">
                             <thead class="text-small text-text-muted">
                                 <tr>
                                     <th scope="col" class="px-3 py-2">From</th>

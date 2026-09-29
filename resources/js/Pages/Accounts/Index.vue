@@ -88,7 +88,7 @@ function changePerPage(event) {
     <AuthenticatedLayout>
         <Head title="Accounts" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h1 class="text-h1">Accounts</h1>
@@ -99,7 +99,7 @@ function changePerPage(event) {
                 <Link
                     v-if="can.create"
                     :href="route('accounts.create')"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary"
                 >
                     New account
                 </Link>
@@ -110,11 +110,11 @@ function changePerPage(event) {
                     v-for="view in views"
                     :key="view.key"
                     type="button"
-                    class="inline-flex min-h-11 items-center rounded-md border px-3 text-small"
+                    class="crm-view-tab"
                     :class="
                         filters.view === view.key
-                            ? 'border-secondary bg-surface text-primary'
-                            : 'border-border bg-surface text-text'
+                            ? 'crm-view-tab-active'
+                            : 'crm-view-tab-idle'
                     "
                     @click="changeView(view.key)"
                 >
@@ -148,15 +148,15 @@ function changePerPage(event) {
                 </div>
                 <button
                     type="submit"
-                    class="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-small font-semibold uppercase tracking-widest text-surface"
+                    class="crm-btn-primary"
                 >
                     Search
                 </button>
             </form>
 
-            <div class="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
-                <table class="min-w-full text-left text-body">
-                    <thead class="bg-bg text-small text-text-muted">
+            <div class="mt-4 crm-table-wrap">
+                <table class="crm-table">
+                    <thead>
                         <tr>
                             <th v-for="column in columns" :key="column.key" scope="col" class="px-3 py-2">
                                 <Link

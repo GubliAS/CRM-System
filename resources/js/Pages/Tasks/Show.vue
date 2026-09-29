@@ -42,14 +42,14 @@ function destroy() {
     <AuthenticatedLayout>
         <Head :title="task.subject" />
 
-        <div class="mx-auto max-w-7xl px-4 py-6">
+        <div class="crm-page">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <h1 class="break-words text-h1">{{ task.subject }}</h1>
                 <div class="flex flex-wrap gap-2">
                     <Link
                         v-if="can.update"
                         :href="route('tasks.edit', task.id)"
-                        class="inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-small font-semibold uppercase tracking-widest text-text"
+                        class="crm-btn-secondary"
                     >
                         Edit
                     </Link>
@@ -60,7 +60,7 @@ function destroy() {
             </div>
 
             <div class="mt-6 space-y-4">
-                <section class="rounded-md border border-border bg-surface p-4">
+                <section class="crm-panel">
                     <h2 class="text-h2">Task details</h2>
                     <dl class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                         <DetailField label="Subject" :value="task.subject" />

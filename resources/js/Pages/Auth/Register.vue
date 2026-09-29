@@ -21,7 +21,7 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout title="Register">
         <Head title="Register" />
 
         <form
@@ -99,7 +99,7 @@ const submit = () => {
             <div class="flex flex-wrap items-center justify-end gap-3 md:col-span-2">
                 <Link
                     :href="route('login')"
-                    class="rounded-md text-body text-text-muted underline hover:text-text focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
+                    class="rounded-md text-body text-secondary underline hover:text-secondary-hover focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
                 >
                     Already registered?
                 </Link>

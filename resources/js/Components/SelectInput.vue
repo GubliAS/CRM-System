@@ -19,7 +19,7 @@ const model = defineModel({
 <template>
     <select
         v-model="model"
-        class="w-full rounded-md border-border bg-surface text-body text-text shadow-sm focus:border-secondary focus:ring-secondary"
+        class="w-full rounded-md border-border bg-surface text-body text-text shadow-sm transition duration-fast focus:border-secondary focus:ring-2 focus:ring-secondary"
     >
         <option value="">{{ placeholder }}</option>
         <option

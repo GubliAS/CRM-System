@@ -2,6 +2,13 @@
 import { Link, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
+defineProps({
+    variant: {
+        type: String,
+        default: 'default',
+    },
+});
+
 const query = ref('');
 const open = ref(false);
 const loading = ref(false);
@@ -123,23 +130,47 @@ function goToResult(item) {
 </script>
 
 <template>
-    <div ref="root" class="relative min-w-0 flex-1 max-w-xl">
-        <form @submit.prevent="submitSearch">
+    <div ref="root" class="relative min-w-0 w-full max-w-xl flex-1">
+        <form @submit.prevent="submitSearch" class="relative">
             <label class="sr-only" for="global-search">Search</label>
+            <span
+                class="pointer-events-none absolute inset-y-0 start-3 flex items-center text-text-muted"
+                aria-hidden="true"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.75"
+                    class="h-4 w-4"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                </svg>
+            </span>
             <input
                 id="global-search"
                 v-model="query"
                 type="search"
                 autocomplete="off"
-                placeholder="Search…"
-                class="w-full min-h-11 rounded-md border border-border bg-surface px-3 text-body text-text shadow-sm focus:border-secondary focus:ring-secondary"
+                placeholder="Search CRM…"
+                class="w-full min-h-11 rounded-md border py-2 pe-3 ps-9 text-body shadow-sm focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary"
+                :class="
+                    variant === 'header'
+                        ? 'border-transparent bg-surface text-text placeholder:text-text-muted'
+                        : 'border-border bg-surface text-text'
+                "
                 @focus="open = true"
             />
         </form>
 
         <div
             v-if="showPanel"
-            class="absolute z-20 mt-1 max-h-96 w-full overflow-y-auto rounded-md border border-border bg-surface shadow-sm"
+            class="absolute z-30 mt-1 max-h-96 w-full overflow-y-auto rounded-md border border-border bg-surface shadow-dropdown"
             role="listbox"
         >
             <div v-if="query.trim().length < 2" class="p-3">

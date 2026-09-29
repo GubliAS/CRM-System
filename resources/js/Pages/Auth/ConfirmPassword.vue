@@ -18,7 +18,7 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout title="Confirm password">
         <Head title="Confirm Password" />
 
         <div class="mb-4 text-body text-text-muted">
