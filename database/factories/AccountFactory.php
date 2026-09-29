@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Account;
+use App\Support\Picklists;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -31,8 +32,8 @@ class AccountFactory extends Factory
             'phone' => fake()->numerify('555-010-####'),
             'fax' => fake()->numerify('555-011-####'),
             'website' => 'https://example.com',
-            'type' => fake()->randomElement(['Customer', 'Prospect', 'Partner', 'Other']),
-            'industry' => fake()->randomElement(['Manufacturing', 'Wholesale', 'Retail', 'Logistics']),
+            'type' => fake()->randomElement(Picklists::ACCOUNT_TYPES),
+            'industry' => fake()->randomElement(Picklists::INDUSTRIES),
             'employees' => fake()->numberBetween(10, 500),
             'annual_revenue' => fake()->randomFloat(2, 100000, 5000000),
             'billing_street' => '100 Demo Street',

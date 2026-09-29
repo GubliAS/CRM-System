@@ -58,8 +58,11 @@ class ContactController extends Controller
                 'first_name',
                 'last_name',
                 'title',
+                'department',
                 'phone',
                 'email',
+                'mailing_city',
+                'mailing_country',
                 'owner_id',
             ])
             ->with([
@@ -112,6 +115,7 @@ class ContactController extends Controller
 
         return Inertia::render('Contacts/Index', [
             'contacts' => $contacts,
+            'summary' => $this->contactSummary($user),
             'filters' => [
                 'search' => $search,
                 'view' => $view,
@@ -124,6 +128,21 @@ class ContactController extends Controller
                 'export' => $user->can('viewAny', Contact::class),
             ],
         ]);
+    }
+
+    /**
+     * @return array{total: int, with_email: int, with_phone: int, accounts: int}
+     */
+    private function contactSummary(User $user): array
+    {
+        $base = Contact::query()->visibleTo($user);
+
+        return [
+            'total' => (int) (clone $base)->count(),
+            'with_email' => (int) (clone $base)->whereNotNull('email')->where('email', '!=', '')->count(),
+            'with_phone' => (int) (clone $base)->whereNotNull('phone')->where('phone', '!=', '')->count(),
+            'accounts' => (int) (clone $base)->whereNotNull('account_id')->distinct()->count('account_id'),
+        ];
     }
 
     public function export(Request $request, CsvExporter $exporter): StreamedResponse

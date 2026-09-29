@@ -17,6 +17,24 @@ class Picklists
     /**
      * @var list<string>
      */
+    public const INDUSTRIES = [
+        'Manufacturing',
+        'Wholesale',
+        'Retail',
+        'Logistics',
+        'Technology',
+        'Healthcare',
+        'Finance',
+        'Construction',
+        'Education',
+        'Energy',
+        'Consulting',
+        'Other',
+    ];
+
+    /**
+     * @var list<string>
+     */
     public const SALUTATIONS = [
         'Mr.',
         'Ms.',

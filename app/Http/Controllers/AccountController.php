@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -57,12 +58,20 @@ class AccountController extends Controller
                 'id',
                 'name',
                 'phone',
+                'website',
                 'type',
                 'industry',
                 'annual_revenue',
+                'billing_city',
+                'billing_country',
                 'owner_id',
             ])
-            ->with(['owner:id,name']);
+            ->with([
+                'owner:id,name',
+                'contacts' => fn ($query) => $query
+                    ->select(['id', 'account_id', 'email'])
+                    ->orderBy('id'),
+            ]);
 
         $useRecent = $view === 'recent' && $search === '';
         $recentIds = $useRecent ? RecentlyViewed::ids($user, Account::class) : [];
@@ -76,7 +85,9 @@ class AccountController extends Controller
             $accounts->where(function (Builder $query) use ($like): void {
                 $query->where('name', 'like', $like)
                     ->orWhere('phone', 'like', $like)
-                    ->orWhere('industry', 'like', $like);
+                    ->orWhere('industry', 'like', $like)
+                    ->orWhere('website', 'like', $like)
+                    ->orWhere('billing_country', 'like', $like);
             });
         }
 
@@ -97,6 +108,7 @@ class AccountController extends Controller
 
         return Inertia::render('Accounts/Index', [
             'accounts' => $accounts,
+            'summary' => $this->accountSummary($user),
             'filters' => [
                 'search' => $search,
                 'view' => $view,
@@ -107,8 +119,38 @@ class AccountController extends Controller
             'can' => [
                 'create' => $user->can('create', Account::class),
                 'export' => $user->can('viewAny', Account::class),
+                'import' => $user->can('viewAny', Account::class),
             ],
         ]);
+    }
+
+    /**
+     * @return array{
+     *     total: int,
+     *     customers: int,
+     *     prospects: int,
+     *     contacts: int
+     * }
+     */
+    private function accountSummary(User $user): array
+    {
+        $base = Account::query()->visibleTo($user);
+
+        $byType = (clone $base)
+            ->select('type', DB::raw('count(*) as aggregate'))
+            ->groupBy('type')
+            ->pluck('aggregate', 'type');
+
+        $contacts = (int) Contact::query()
+            ->whereHas('account', fn (Builder $query) => $query->visibleTo($user))
+            ->count();
+
+        return [
+            'total' => (int) (clone $base)->count(),
+            'customers' => (int) ($byType['Customer'] ?? 0),
+            'prospects' => (int) ($byType['Prospect'] ?? 0),
+            'contacts' => $contacts,
+        ];
     }
 
     public function export(Request $request, CsvExporter $exporter): StreamedResponse
@@ -167,6 +209,7 @@ class AccountController extends Controller
         return Inertia::render('Accounts/Create', [
             'parentAccounts' => $this->parentAccounts($request->user()),
             'types' => Picklists::ACCOUNT_TYPES,
+            'industries' => Picklists::INDUSTRIES,
         ]);
     }
 
@@ -231,6 +274,7 @@ class AccountController extends Controller
             'account' => $account,
             'parentAccounts' => $this->parentAccounts($user, $account->id),
             'types' => Picklists::ACCOUNT_TYPES,
+            'industries' => Picklists::INDUSTRIES,
             'owners' => $this->owners($user),
             'canReassign' => $user->mayReassignOwner(),
         ]);

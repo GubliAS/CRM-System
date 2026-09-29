@@ -1,9 +1,9 @@
 <script setup>
 import Checkbox from '@/Components/Checkbox.vue';
+import CrmSelect from '@/Components/CrmSelect.vue';
 import FormField from '@/Components/FormField.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import SelectInput from '@/Components/SelectInput.vue';
 import TextArea from '@/Components/TextArea.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Link } from '@inertiajs/vue3';
@@ -19,6 +19,10 @@ const props = defineProps({
         required: true,
     },
     types: {
+        type: Array,
+        required: true,
+    },
+    industries: {
         type: Array,
         required: true,
     },
@@ -40,26 +44,37 @@ const emit = defineEmits(['submit']);
 
 const copyBilling = ref(false);
 
-const parentOptions = computed(() =>
-    props.parentAccounts.map((account) => ({
+const parentOptions = computed(() => [
+    { value: '', label: 'None' },
+    ...props.parentAccounts.map((account) => ({
         value: String(account.id),
         label: account.name,
     })),
-);
+]);
 
-const typeOptions = computed(() =>
-    props.types.map((type) => ({
+const typeOptions = computed(() => [
+    { value: '', label: 'Select a type' },
+    ...props.types.map((type) => ({
         value: type,
         label: type,
     })),
-);
+]);
 
-const ownerOptions = computed(() =>
-    props.owners.map((owner) => ({
+const industryOptions = computed(() => [
+    { value: '', label: 'Select an industry' },
+    ...props.industries.map((industry) => ({
+        value: industry,
+        label: industry,
+    })),
+]);
+
+const ownerOptions = computed(() => [
+    { value: '', label: 'Select an owner' },
+    ...props.owners.map((owner) => ({
         value: String(owner.id),
         label: owner.name,
     })),
-);
+]);
 
 const billingPairs = [
     ['billing_street', 'shipping_street'],
@@ -96,9 +111,10 @@ watch(
         </FormField>
 
         <FormField label="Parent account" :error="form.errors.parent_account_id">
-            <SelectInput
+            <CrmSelect
                 id="parent_account_id"
                 v-model="form.parent_account_id"
+                aria-label="Parent account"
                 :options="parentOptions"
                 placeholder="None"
             />
@@ -117,15 +133,33 @@ watch(
         </FormField>
 
         <FormField label="Type" :error="form.errors.type">
-            <SelectInput id="type" v-model="form.type" :options="typeOptions" placeholder="Select a type" />
+            <CrmSelect
+                id="type"
+                v-model="form.type"
+                aria-label="Type"
+                :options="typeOptions"
+                placeholder="Select a type"
+            />
         </FormField>
 
         <FormField label="Industry" :error="form.errors.industry">
-            <TextInput id="industry" v-model="form.industry" class="block w-full" maxlength="80" />
+            <CrmSelect
+                id="industry"
+                v-model="form.industry"
+                aria-label="Industry"
+                :options="industryOptions"
+                placeholder="Select an industry"
+            />
         </FormField>
 
         <FormField v-if="canReassign" label="Owner" :error="form.errors.owner_id">
-            <SelectInput id="owner_id" v-model="form.owner_id" :options="ownerOptions" placeholder="Select an owner" />
+            <CrmSelect
+                id="owner_id"
+                v-model="form.owner_id"
+                aria-label="Owner"
+                :options="ownerOptions"
+                placeholder="Select an owner"
+            />
         </FormField>
 
         <h2 class="mt-2 text-h2 md:col-span-2">Address</h2>

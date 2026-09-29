@@ -13,6 +13,10 @@ defineProps({
         type: Array,
         required: true,
     },
+    industries: {
+        type: Array,
+        required: true,
+    },
 });
 
 const form = useForm(accountFormData());
@@ -42,6 +46,7 @@ function submit(saveAndNew) {
                     :form="form"
                     :parent-accounts="parentAccounts"
                     :types="types"
+                    :industries="industries"
                     :cancel-href="route('accounts.index')"
                     @submit="submit"
                 />

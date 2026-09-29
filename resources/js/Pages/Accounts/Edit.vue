@@ -17,6 +17,10 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    industries: {
+        type: Array,
+        required: true,
+    },
     owners: {
         type: Array,
         default: () => [],
@@ -56,6 +60,7 @@ function submit(saveAndNew) {
                     :form="form"
                     :parent-accounts="parentAccounts"
                     :types="types"
+                    :industries="industries"
                     :owners="owners"
                     :can-reassign="canReassign"
                     :cancel-href="route('accounts.index')"

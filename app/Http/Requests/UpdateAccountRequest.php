@@ -33,7 +33,7 @@ class UpdateAccountRequest extends FormRequest
             'fax' => ['nullable', 'string', 'max:40'],
             'website' => ['nullable', 'string', 'max:255'],
             'type' => ['nullable', 'string', Rule::in(Picklists::ACCOUNT_TYPES)],
-            'industry' => ['nullable', 'string', 'max:80'],
+            'industry' => ['nullable', 'string', Rule::in(Picklists::INDUSTRIES)],
             'employees' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'annual_revenue' => ['nullable', 'numeric', 'min:0', 'decimal:0,2', 'max:9999999999999.99'],
             'billing_street' => ['nullable', 'string', 'max:255'],
