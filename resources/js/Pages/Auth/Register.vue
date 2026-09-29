@@ -1,9 +1,6 @@
 <script setup>
-import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
+import AuthBrandLayout from '@/Layouts/AuthBrandLayout.vue';
+import AuthPillField from '@/Components/AuthPillField.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 const form = useForm({
@@ -21,97 +18,77 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout title="Register">
+    <AuthBrandLayout
+        variant="register"
+        title="Register"
+        subtitle="For your account"
+    >
         <Head title="Register" />
 
-        <form
-            @submit.prevent="submit"
-            class="grid grid-cols-1 gap-4 md:grid-cols-2"
-        >
-            <div>
-                <InputLabel required for="name" value="Name" />
+        <form @submit.prevent="submit" class="auth-form">
+            <AuthPillField
+                id="name"
+                v-model="form.name"
+                type="text"
+                icon="user"
+                label="Name"
+                placeholder="Name"
+                required
+                autofocus
+                autocomplete="name"
+                :error="form.errors.name"
+            />
 
-                <TextInput
-                    id="name"
-                    type="text"
-                    class="mt-1 block w-full"
-                    v-model="form.name"
-                    required
-                    autofocus
-                    autocomplete="name"
-                />
+            <AuthPillField
+                id="email"
+                v-model="form.email"
+                type="email"
+                icon="email"
+                label="Email"
+                placeholder="someone@gmail.com"
+                required
+                autocomplete="username"
+                :error="form.errors.email"
+            />
 
-                <InputError class="mt-2" :message="form.errors.name" />
-            </div>
+            <AuthPillField
+                id="password"
+                v-model="form.password"
+                type="password"
+                icon="lock"
+                label="Password"
+                placeholder="············"
+                required
+                autocomplete="new-password"
+                :error="form.errors.password"
+            />
 
-            <div>
-                <InputLabel required for="email" value="Email" />
+            <AuthPillField
+                id="password_confirmation"
+                v-model="form.password_confirmation"
+                type="password"
+                icon="lock"
+                label="Confirm Password"
+                placeholder="Confirm password"
+                required
+                autocomplete="new-password"
+                :error="form.errors.password_confirmation"
+            />
 
-                <TextInput
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    v-model="form.email"
-                    required
-                    autocomplete="username"
-                />
+            <button
+                type="submit"
+                class="auth-btn auth-btn--primary"
+                :disabled="form.processing"
+            >
+                Register
+            </button>
 
-                <InputError class="mt-2" :message="form.errors.email" />
-            </div>
-
-            <div>
-                <InputLabel required for="password" value="Password" />
-
-                <TextInput
-                    id="password"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password"
-                    required
-                    autocomplete="new-password"
-                />
-
-                <InputError class="mt-2" :message="form.errors.password" />
-            </div>
-
-            <div>
-                <InputLabel
-                    required
-                    for="password_confirmation"
-                    value="Confirm Password"
-                />
-
-                <TextInput
-                    id="password_confirmation"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password_confirmation"
-                    required
-                    autocomplete="new-password"
-                />
-
-                <InputError
-                    class="mt-2"
-                    :message="form.errors.password_confirmation"
-                />
-            </div>
-
-            <div class="flex flex-wrap items-center justify-end gap-3 md:col-span-2">
-                <Link
-                    :href="route('login')"
-                    class="rounded-md text-body text-secondary underline hover:text-secondary-hover focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
-                >
-                    Already registered?
+            <p class="auth-footer">
+                Already have an account?
+                <Link :href="route('login')" class="auth-footer-link">
+                    Login
                 </Link>
-
-                <PrimaryButton
-                    class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-                    Register
-                </PrimaryButton>
-            </div>
+            </p>
         </form>
-    </GuestLayout>
+    </AuthBrandLayout>
 </template>

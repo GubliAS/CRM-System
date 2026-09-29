@@ -183,13 +183,22 @@ function changePerPage(event) {
                     <tbody>
                         <tr v-if="contacts.data.length === 0">
                             <td colspan="6" class="px-4 py-8 text-center text-body text-text-muted">
-                                {{
-                                    filters.search
-                                        ? 'No contacts match your search.'
-                                        : filters.view === 'recent'
-                                          ? 'No recently viewed contacts.'
-                                          : 'No contacts yet.'
-                                }}
+                                <template v-if="filters.search">
+                                    No contacts match your search.
+                                </template>
+                                <template v-else-if="filters.view === 'recent'">
+                                    <p>No recently viewed contacts.</p>
+                                    <button
+                                        type="button"
+                                        class="crm-btn-secondary mt-3"
+                                        @click="changeView('all')"
+                                    >
+                                        View all contacts
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    No contacts yet.
+                                </template>
                             </td>
                         </tr>
                         <tr

@@ -204,9 +204,28 @@ function changePerPage(event) {
                         <tr v-if="opportunities.data.length === 0">
                             <td
                                 colspan="7"
-                                class="px-3 py-6 text-center text-text-muted"
+                                class="px-3 py-6 text-center text-body text-text-muted"
                             >
-                                No opportunities match this filter.
+                                <template
+                                    v-if="
+                                        filters.view === 'recent' &&
+                                        !filters.archived &&
+                                        !filters.stage &&
+                                        !filters.year
+                                    "
+                                >
+                                    <p>No recently viewed opportunities.</p>
+                                    <button
+                                        type="button"
+                                        class="crm-btn-secondary mt-3"
+                                        @click="changeView('all')"
+                                    >
+                                        View all opportunities
+                                    </button>
+                                </template>
+                                <template v-else>
+                                    No opportunities match this filter.
+                                </template>
                             </td>
                         </tr>
                         <tr

@@ -49,6 +49,15 @@ export default {
                     DEFAULT: 'var(--color-on-primary)',
                     muted: 'var(--color-on-primary-muted)',
                 },
+                auth: {
+                    'page-bg': 'var(--auth-page-bg)',
+                    'field-bg': 'var(--auth-field-bg)',
+                    wave: {
+                        1: 'var(--auth-wave-1)',
+                        2: 'var(--auth-wave-2)',
+                        3: 'var(--auth-wave-3)',
+                    },
+                },
             },
             fontFamily: {
                 sans: 'var(--font-sans)',
