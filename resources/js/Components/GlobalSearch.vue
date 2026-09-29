@@ -161,7 +161,7 @@ function goToResult(item) {
                 class="w-full min-h-11 rounded-md border py-2 pe-3 ps-9 text-body shadow-sm focus:border-secondary focus:outline-none focus:ring-2 focus:ring-secondary"
                 :class="
                     variant === 'header'
-                        ? 'border-transparent bg-surface text-text placeholder:text-text-muted'
+                        ? 'border-border bg-bg text-text placeholder:text-text-muted'
                         : 'border-border bg-surface text-text'
                 "
                 @focus="open = true"

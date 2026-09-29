@@ -82,8 +82,15 @@ function tabIsCurrent(tab) {
 function linkClass(tab) {
     const current = tabIsCurrent(tab);
     const onPrimary = props.tone === 'on-primary';
+    const sidebar = props.tone === 'sidebar';
 
-    if (props.stacked) {
+    if (sidebar || props.stacked) {
+        if (sidebar) {
+            return current
+                ? 'rounded-md bg-primary font-semibold text-on-primary shadow-panel'
+                : 'rounded-md text-text-muted hover:bg-bg hover:text-text';
+        }
+
         if (onPrimary) {
             return current
                 ? 'border-l-4 border-on-primary bg-primary-hover text-on-primary'
@@ -108,7 +115,13 @@ function linkClass(tab) {
 </script>
 
 <template>
-    <div :class="stacked ? 'flex flex-col' : 'flex flex-nowrap'">
+    <div
+        :class="
+            stacked || tone === 'sidebar'
+                ? 'flex flex-col gap-1'
+                : 'flex flex-nowrap'
+        "
+    >
         <template v-for="tab in tabs" :key="tab.label">
             <Link
                 v-if="tab.routeName"
@@ -125,7 +138,9 @@ function linkClass(tab) {
                 :class="
                     tone === 'on-primary'
                         ? 'crm-chrome-muted border-b-2 border-transparent'
-                        : 'border-b-2 border-transparent text-text-muted'
+                        : tone === 'sidebar'
+                          ? 'rounded-md text-text-muted'
+                          : 'border-b-2 border-transparent text-text-muted'
                 "
                 aria-disabled="true"
                 title="Coming in a later stage"

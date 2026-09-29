@@ -63,10 +63,13 @@ export default {
             boxShadow: {
                 panel: 'var(--shadow-panel)',
                 dropdown: 'var(--shadow-dropdown)',
+                card: 'var(--shadow-card)',
             },
             borderRadius: {
                 sm: 'var(--radius-sm)',
                 md: 'var(--radius-md)',
+                xl: 'var(--radius-xl)',
+                '2xl': 'var(--radius-2xl)',
             },
             transitionDuration: {
                 fast: '150ms',
